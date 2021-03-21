@@ -105,7 +105,16 @@ static struct hid_api_version api_version = {
 		USHORT OutputReportByteLength;
 		USHORT FeatureReportByteLength;
 		USHORT Reserved[17];
-		USHORT fields_not_used_by_hidapi[10];
+		USHORT NumberLinkCollectionNodes;
+		USHORT NumberInputButtonCaps;
+		USHORT NumberInputValueCaps;
+		USHORT NumberInputDataIndices;
+		USHORT NumberOutputButtonCaps;
+		USHORT NumberOutputValueCaps;
+		USHORT NumberOutputDataIndices;
+		USHORT NumberFeatureButtonCaps;
+		USHORT NumberFeatureValueCaps;
+		USHORT NumberFeatureDataIndices;
 	} HIDP_CAPS, *PHIDP_CAPS;
 	typedef void* PHIDP_PREPARSED_DATA;
 	typedef struct _HIDP_LINK_COLLECTION_NODE {
@@ -556,6 +565,20 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 					cur_dev->usage = caps.Usage;
 				}
 
+				// Experimental Report Descriptor code starts here
+				// See: https://docs.microsoft.com/en-us/windows-hardware/drivers/hid/link-collections#ddk-link-collection-array-kg
+
+				PHIDP_LINK_COLLECTION_NODE link_collection_nodes;
+				link_collection_nodes = (PHIDP_LINK_COLLECTION_NODE) malloc(caps.NumberLinkCollectionNodes*sizeof(HIDP_LINK_COLLECTION_NODE));
+				ULONG                     link_collection_nodes_length = caps.NumberLinkCollectionNodes;
+				if (HidP_GetLinkCollectionNodes(link_collection_nodes, &link_collection_nodes_length, pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetLinkCollectionNodes: Buffer to small");
+				}
+				else {
+
+				}
+				free(link_collection_nodes);
+				// Experimental Report Descriptor code ends here
 				HidD_FreePreparsedData(pp_data);
 			}
 			
