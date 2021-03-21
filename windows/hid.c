@@ -214,7 +214,8 @@ static struct hid_api_version api_version = {
 	typedef enum _HIDP_REPORT_TYPE {
 		HidP_Input,
 		HidP_Output,
-		HidP_Feature
+		HidP_Feature,
+		NUM_OF_HIDP_REPORT_TYPES
 	} HIDP_REPORT_TYPE;
 
 	#define HIDP_STATUS_SUCCESS 0x110000
@@ -569,13 +570,59 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 				// See: https://docs.microsoft.com/en-us/windows-hardware/drivers/hid/link-collections#ddk-link-collection-array-kg
 
 				PHIDP_LINK_COLLECTION_NODE link_collection_nodes;
-				link_collection_nodes = (PHIDP_LINK_COLLECTION_NODE) malloc(caps.NumberLinkCollectionNodes*sizeof(HIDP_LINK_COLLECTION_NODE));
+				link_collection_nodes = (PHIDP_LINK_COLLECTION_NODE)malloc(caps.NumberLinkCollectionNodes * sizeof(HIDP_LINK_COLLECTION_NODE));
 				ULONG                     link_collection_nodes_length = caps.NumberLinkCollectionNodes;
+
+				PHIDP_BUTTON_CAPS button_caps[NUM_OF_HIDP_REPORT_TYPES];
+				USHORT button_caps_length[NUM_OF_HIDP_REPORT_TYPES];
+
+				button_caps[HidP_Input] = (PHIDP_BUTTON_CAPS)malloc(caps.NumberInputButtonCaps * sizeof(HIDP_BUTTON_CAPS));
+				button_caps_length[HidP_Input] = caps.NumberInputButtonCaps;
+				button_caps[HidP_Output] = (PHIDP_BUTTON_CAPS)malloc(caps.NumberOutputButtonCaps * sizeof(HIDP_BUTTON_CAPS));
+				button_caps_length[HidP_Output] = caps.NumberOutputButtonCaps;
+				button_caps[HidP_Feature] = (PHIDP_BUTTON_CAPS)malloc(caps.NumberFeatureButtonCaps * sizeof(HIDP_BUTTON_CAPS));
+				button_caps_length[HidP_Feature] = caps.NumberFeatureButtonCaps;
+				
+				
+			    PHIDP_VALUE_CAPS value_caps[NUM_OF_HIDP_REPORT_TYPES];
+				USHORT value_caps_length[NUM_OF_HIDP_REPORT_TYPES];
+
+				value_caps[HidP_Input] = (PHIDP_VALUE_CAPS)malloc(caps.NumberInputValueCaps * sizeof(HIDP_VALUE_CAPS));
+				value_caps_length[HidP_Input] = caps.NumberInputValueCaps;
+				value_caps[HidP_Output] = (PHIDP_VALUE_CAPS)malloc(caps.NumberOutputValueCaps * sizeof(HIDP_VALUE_CAPS));
+				value_caps_length[HidP_Output] = caps.NumberOutputValueCaps;
+				value_caps[HidP_Feature] = (PHIDP_VALUE_CAPS)malloc(caps.NumberFeatureValueCaps * sizeof(HIDP_VALUE_CAPS));
+				value_caps_length[HidP_Feature] = caps.NumberFeatureValueCaps;
+
 				if (HidP_GetLinkCollectionNodes(link_collection_nodes, &link_collection_nodes_length, pp_data) != HIDP_STATUS_SUCCESS) {
 					//register_error(dev, "HidP_GetLinkCollectionNodes: Buffer to small");
 				}
+				else if ((button_caps_length[HidP_Input] != 0) && HidP_GetButtonCaps(HidP_Input, button_caps[HidP_Input], &button_caps_length[HidP_Input], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetButtonCaps: HidP_Input: The preparsed data is not valid. ");
+				}
+				else if ((button_caps_length[HidP_Output] != 0) && HidP_GetButtonCaps(HidP_Output, button_caps[HidP_Output], &button_caps_length[HidP_Output], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetButtonCaps: HidP_Output: The preparsed data is not valid. ");
+				}
+				else if ((button_caps_length[HidP_Feature] != 0) && HidP_GetButtonCaps(HidP_Feature, button_caps[HidP_Feature], &button_caps_length[HidP_Feature], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetButtonCaps: HidP_Feature: The preparsed data is not valid. ");
+				}
+				else if ((value_caps_length[HidP_Input] != 0) && HidP_GetValueCaps(HidP_Input, value_caps[HidP_Input], &value_caps_length[HidP_Input], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetValueCaps: HidP_Input: The preparsed data is not valid. ");
+				}
+				else if ((value_caps_length[HidP_Output] != 0) && HidP_GetValueCaps(HidP_Output, value_caps[HidP_Output], &value_caps_length[HidP_Output], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetValueCaps: HidP_Output: The preparsed data is not valid. ");
+				}
+				else if ((value_caps_length[HidP_Feature] != 0) && HidP_GetValueCaps(HidP_Feature, value_caps[HidP_Feature], &value_caps_length[HidP_Feature], pp_data) != HIDP_STATUS_SUCCESS) {
+					//register_error(dev, "HidP_GetValueCaps: HidP_Feature: The preparsed data is not valid. ");
+				}
 				else {
+					//register_error(dev, "HidP_GetButtonCaps: HidP_Input: The preparsed data is not valid. ");
+				}
 
+				// Free allocated memory
+				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+					free(button_caps[rt_idx]);
+					free(value_caps[rt_idx]);
 				}
 				free(link_collection_nodes);
 				// Experimental Report Descriptor code ends here
