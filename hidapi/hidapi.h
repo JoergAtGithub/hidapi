@@ -78,7 +78,7 @@ extern "C" {
 		struct hid_device_;
 		typedef struct hid_device_ hid_device; /**< opaque hidapi structure */
 
-		/** hidapi info structure */
+		/** hidapi device info structure */
 		struct hid_device_info {
 			/** Platform-specific device path */
 			char *path;
@@ -110,11 +110,56 @@ extern "C" {
 				* Valid on the Mac implementation if and only if the device
 				  is a USB HID device. */
 			int interface_number;
+			/** Descriptor of the first report of this Device*/
+			struct hid_report_info *first_report_descriptor;
 
 			/** Pointer to the next device */
 			struct hid_device_info *next;
 		};
 
+		enum hid_report_type
+		{
+			hid_input_report = 1,
+			hid_output_report = 2,
+			hid_feature_report = 3
+		};
+
+		/** hidapi report info structure */
+		struct hid_report_info {
+
+			/** Type of this report */
+			enum hid_report_type report_type;
+
+			/** ID of this report */
+			unsigned short report_id;
+
+			/** Descriptor of the first field of the descriptor
+			of this report*/
+			struct hid_field_info* first;
+
+			/** Pointer to the next report */
+			struct hid_report_info* next;
+		};
+
+		/** hidapi report info structure */
+		struct hid_field_info {
+
+			/** Usage Page for this field */
+			unsigned short usage_page;
+			/** Usage for this field */
+			unsigned short usage;
+			/** Logical minimum for this field */
+			unsigned short logical_minimum;
+			/** Logical maximum for this field */
+			unsigned short logical_maximum;
+			/** Size of this field in bits */
+			unsigned short size;
+			/** Number of instances of this field */
+			unsigned short count;
+
+			/** Pointer to the next field */
+			struct hid_field_info* next;
+		};
 
 		/** @brief Initialize the HIDAPI library.
 
