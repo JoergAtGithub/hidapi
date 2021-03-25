@@ -376,57 +376,48 @@ static int lookup_functions()
 
 
 typedef enum rd_items_ {
-	rd_main_item_input =			   0x80, ///< 1000 00 nn
-	rd_main_item_output =			   0x81, ///< 1001 00 nn
-	rd_main_item_feature =			   0xB0, ///< 1011 00 nn
-	rd_main_item_collection =		   0xA0, ///< 1010 00 nn
-	rd_main_item_collection_end =	   0xC0, ///< 1100 00 nn
-	rd_global_item_usage_page =		   0x04, ///< 0000 01 nn
-	rd_global_item_logical_minimum =   0x14, ///< 0001 01 nn
-	rd_global_item_logical_maximum =   0x24, ///< 0010 01 nn
-	rd_global_item_physical_minimum =  0x34, ///< 0011 01 nn
-	rd_global_item_physical_maximum =  0x44, ///< 0100 01 nn
-	rd_global_item_unit_exponent =     0x54, ///< 0101 01 nn
-	rd_global_item_unit =              0x64, ///< 0110 01 nn
-	rd_global_item_report_size =       0x74, ///< 0111 01 nn
-	rd_global_item_report_id =         0x84, ///< 1000 01 nn
-	rd_global_item_report_count =      0x94, ///< 1001 01 nn
-	rd_global_item_push =              0xA4, ///< 1010 01 nn
-	rd_global_item_pop =               0xB4, ///< 1011 01 nn
-	rd_local_item_usage =              0x08, ///< 0000 10 nn
-	rd_local_item_usage_minimum =      0x18, ///< 0001 10 nn
-	rd_local_item_usage_maximum =      0x28, ///< 0010 10 nn
-	rd_local_item_designator_index =   0x38, ///< 0011 10 nn
-	rd_local_item_designator_minimum = 0x48, ///< 0100 10 nn
-	rd_local_item_designator_maximum = 0x58, ///< 0101 10 nn
-	rd_local_item_string =             0x78, ///< 0111 10 nn
-	rd_local_item_string_minimum =     0x88, ///< 1000 10 nn
-	rd_local_item_string_maximum =     0x98, ///< 1001 10 nn
-	rd_local_item_delimiter =          0xA8  ///< 1010 10 nn
-} RD_ITEMS
+	rd_main_input =			      0x80, ///< 1000 00 nn
+	rd_main_output =			  0x81, ///< 1001 00 nn
+	rd_main_feature =			  0xB0, ///< 1011 00 nn
+	rd_main_collection =		  0xA0, ///< 1010 00 nn
+	rd_main_collection_end =	  0xC0, ///< 1100 00 nn
+	rd_global_usage_page =		  0x04, ///< 0000 01 nn
+	rd_global_logical_minimum =   0x14, ///< 0001 01 nn
+	rd_global_logical_maximum =   0x24, ///< 0010 01 nn
+	rd_global_physical_minimum =  0x34, ///< 0011 01 nn
+	rd_global_physical_maximum =  0x44, ///< 0100 01 nn
+	rd_global_unit_exponent =     0x54, ///< 0101 01 nn
+	rd_global_unit =              0x64, ///< 0110 01 nn
+	rd_global_report_size =       0x74, ///< 0111 01 nn
+	rd_global_report_id =         0x84, ///< 1000 01 nn
+	rd_global_report_count =      0x94, ///< 1001 01 nn
+	rd_global_push =              0xA4, ///< 1010 01 nn
+	rd_global_pop =               0xB4, ///< 1011 01 nn
+	rd_local_usage =              0x08, ///< 0000 10 nn
+	rd_local_usage_minimum =      0x18, ///< 0001 10 nn
+	rd_local_usage_maximum =      0x28, ///< 0010 10 nn
+	rd_local_designator_index =   0x38, ///< 0011 10 nn
+	rd_local_designator_minimum = 0x48, ///< 0100 10 nn
+	rd_local_designator_maximum = 0x58, ///< 0101 10 nn
+	rd_local_string =             0x78, ///< 0111 10 nn
+	rd_local_string_minimum =     0x88, ///< 1000 10 nn
+	rd_local_string_maximum =     0x98, ///< 1001 10 nn
+	rd_local_delimiter =          0xA8  ///< 1010 10 nn
+} RD_ITEMS;
 
-
-;
-typedef enum rd_item_type_ {
-	rd_main_item = 0,
-	rd_global_item = 1,
-	rd_local_item = 2,
-	rd_reserve_item = 3
-} RD_ITEM_TYPE;
 
 /// <summary>
 ///  Writes a short report descriptor item according USB HID spec 1.11 chapter 6.2.2.2
 /// </summary>
 /// <param name="data">Optional data  (NULL if bSize is 0)</param>
-/// <param name="bTag">Numeric expression specifying the function of the item.</param>
-/// <param name="bType">Enumeration identifying type of the item</param>
+/// <param name="rd_item">Enumeration identifying type (Main, Global, Local) and function (e.g Usage or Report Count) of the item.</param>
 /// <param name="bSize">Numeric expression specifying size of data (range 0-3 for 0,1,2 or 4Bytes)</param>
 /// <returns></returns>
-static int rd_write_short_item(unsigned char *data, unsigned char bTag, enum RD_ITEM_TYPE bType, unsigned char bSize) {
-	if ((bTag > 0x0F) || (bType > 3) || (bType > 3)) {
+static int rd_write_short_item(unsigned char *data, enum RD_ITEMS rd_item, unsigned char bSize) {
+	if ((rd_item & 0x03) || (bSize > 3)) {
 		return -1; // Invaid input data
 	}
-	unsigned char oneBytePrefix = (bTag << 4) + (bType << 2) + bSize;
+	unsigned char oneBytePrefix = rd_item + bSize;
 
 	if (bSize == 0) {
 		printf("%02X ", oneBytePrefix);
@@ -455,17 +446,17 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
 			unsigned char data = 0x00;
-			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			rd_write_short_item(&data, rd_main_collection, 1);
 			printf("Collection (Physical)\n");
 		}
 		else if(link_collection_nodes[collection_node_idx].CollectionType == 1) {
 			unsigned char data = 0x01;
-			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			rd_write_short_item(&data, rd_main_collection, 1);
 			printf("Collection (Application)\n");
 		}
 		else if (link_collection_nodes[collection_node_idx].CollectionType == 2) {
 			unsigned char data = 0x02;
-			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			rd_write_short_item(&data, rd_main_collection, 1);
 			printf("Collection (Logical)\n");
 		}
 		else {
@@ -492,33 +483,33 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 				if (value_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
 
 					unsigned char data = value_caps[rt_idx][caps_idx].ReportID;
-					rd_write_short_item(&data, 0b1000, rd_global_item, 1);
+					rd_write_short_item(&data, rd_global_report_id, 1);
 					printf("Report ID (%d)\n", data);
 					if (value_caps[rt_idx][caps_idx].IsRange) {
 						data = value_caps[rt_idx][caps_idx].Range.UsageMin;
-						rd_write_short_item(&data, 0b0001, rd_local_item, 1);
+						rd_write_short_item(&data, rd_local_usage_minimum, 1);
 						printf("Usage Minimum (%d)\n", data);
 						data = value_caps[rt_idx][caps_idx].Range.UsageMax;
-						rd_write_short_item(&data, 0b0010, rd_local_item, 1);
+						rd_write_short_item(&data, rd_local_usage_maximum, 1);
 						printf("Usage Maximum (%d)\n", data);
 					} else {
 						data = value_caps[rt_idx][caps_idx].NotRange.Usage;
-						rd_write_short_item(&data, 0b0000, rd_local_item, 1);
+						rd_write_short_item(&data, rd_local_usage, 1);
 						printf("Usage  (%d)\n", data);
 					}
 
 					data = value_caps[rt_idx][caps_idx].LogicalMin;
-					rd_write_short_item(&data, 0b0001, rd_global_item, 1);
+					rd_write_short_item(&data, rd_global_logical_minimum, 1);
 					printf("Logical Minimum (%d)\n", data);
 					data = value_caps[rt_idx][caps_idx].LogicalMax;
-					rd_write_short_item(&data, 0b0010, rd_global_item, 1);
+					rd_write_short_item(&data, rd_global_logical_maximum, 1);
 					printf("Logical Maximum (%d)\n", data);
 
 					data = value_caps[rt_idx][caps_idx].BitSize;
-					rd_write_short_item(&data, 0b0111, rd_global_item, 1);
+					rd_write_short_item(&data, rd_global_report_size, 1);
 					printf("Report Size (%d)\n", data);
 					data = value_caps[rt_idx][caps_idx].ReportCount;
-					rd_write_short_item(&data, 0b1001, rd_global_item, 1);
+					rd_write_short_item(&data, rd_global_report_count, 1);
 					printf("Report Count (%d)\n", data);
 
 					if (rt_idx == HidP_Input) {
@@ -534,6 +525,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 			}
 					
 		}
+		rd_write_short_item(NULL, rd_main_collection_end, 0);
 		printf("End Collection\n");
 	}
 	return 0;
