@@ -256,6 +256,7 @@ static struct hid_api_version api_version = {
 	static BOOLEAN initialized = FALSE;
 #endif /* HIDAPI_USE_DDK */
 
+
 struct hid_device_ {
 		HANDLE device_handle;
 		BOOL blocking;
@@ -373,8 +374,169 @@ static int lookup_functions()
 }
 #endif
 
+
+typedef enum rd_items_ {
+	rd_main_item_input =			   0x80, ///< 1000 00 nn
+	rd_main_item_output =			   0x81, ///< 1001 00 nn
+	rd_main_item_feature =			   0xB0, ///< 1011 00 nn
+	rd_main_item_collection =		   0xA0, ///< 1010 00 nn
+	rd_main_item_collection_end =	   0xC0, ///< 1100 00 nn
+	rd_global_item_usage_page =		   0x04, ///< 0000 01 nn
+	rd_global_item_logical_minimum =   0x14, ///< 0001 01 nn
+	rd_global_item_logical_maximum =   0x24, ///< 0010 01 nn
+	rd_global_item_physical_minimum =  0x34, ///< 0011 01 nn
+	rd_global_item_physical_maximum =  0x44, ///< 0100 01 nn
+	rd_global_item_unit_exponent =     0x54, ///< 0101 01 nn
+	rd_global_item_unit =              0x64, ///< 0110 01 nn
+	rd_global_item_report_size =       0x74, ///< 0111 01 nn
+	rd_global_item_report_id =         0x84, ///< 1000 01 nn
+	rd_global_item_report_count =      0x94, ///< 1001 01 nn
+	rd_global_item_push =              0xA4, ///< 1010 01 nn
+	rd_global_item_pop =               0xB4, ///< 1011 01 nn
+	rd_local_item_usage =              0x08, ///< 0000 10 nn
+	rd_local_item_usage_minimum =      0x18, ///< 0001 10 nn
+	rd_local_item_usage_maximum =      0x28, ///< 0010 10 nn
+	rd_local_item_designator_index =   0x38, ///< 0011 10 nn
+	rd_local_item_designator_minimum = 0x48, ///< 0100 10 nn
+	rd_local_item_designator_maximum = 0x58, ///< 0101 10 nn
+	rd_local_item_string =             0x78, ///< 0111 10 nn
+	rd_local_item_string_minimum =     0x88, ///< 1000 10 nn
+	rd_local_item_string_maximum =     0x98, ///< 1001 10 nn
+	rd_local_item_delimiter =          0xA8  ///< 1010 10 nn
+} RD_ITEMS
+
+
+;
+typedef enum rd_item_type_ {
+	rd_main_item = 0,
+	rd_global_item = 1,
+	rd_local_item = 2,
+	rd_reserve_item = 3
+} RD_ITEM_TYPE;
+
+/// <summary>
+///  Writes a short report descriptor item according USB HID spec 1.11 chapter 6.2.2.2
+/// </summary>
+/// <param name="data">Optional data  (NULL if bSize is 0)</param>
+/// <param name="bTag">Numeric expression specifying the function of the item.</param>
+/// <param name="bType">Enumeration identifying type of the item</param>
+/// <param name="bSize">Numeric expression specifying size of data (range 0-3 for 0,1,2 or 4Bytes)</param>
+/// <returns></returns>
+static int rd_write_short_item(unsigned char *data, unsigned char bTag, enum RD_ITEM_TYPE bType, unsigned char bSize) {
+	if ((bTag > 0x0F) || (bType > 3) || (bType > 3)) {
+		return -1; // Invaid input data
+	}
+	unsigned char oneBytePrefix = (bTag << 4) + (bType << 2) + bSize;
+
+	if (bSize == 0) {
+		printf("%02X ", oneBytePrefix);
+	} else if (bSize == 1) {
+		printf("%02X %02X ", oneBytePrefix, data[0]);
+	} else if (bSize == 2) {
+		printf("%02X %02X %02X ", oneBytePrefix, data[0], data[1]);
+	} else if(bSize == 3) {
+		printf("%02X %02X %02X %02X %02X ", oneBytePrefix, data[0], data[1], data[2], data[3]);
+	}
+	return 0;
+}
+
+/// <summary>
+/// Writes a long report descriptor item according USB HID spec 1.11 chapter 6.2.2.3
+/// </summary>
+/// <param name="data">Optional data items (NULL if bDataSize is 0)</param>
+/// <param name="bLongItemTag">Long item tag (8 bits)</param>
+/// <param name="bDataSize">Size of long item data (range 0-255 in Bytes)</param>
+/// <returns></returns>
+static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, unsigned char bDataSize) {
+
+}
+
 static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, ULONG link_collection_nodes_len, PHIDP_BUTTON_CAPS* button_caps, USHORT* button_caps_len, PHIDP_VALUE_CAPS* value_caps, USHORT* value_caps_len) {
-	
+	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+		if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
+			unsigned char data = 0x00;
+			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			printf("Collection (Physical)\n");
+		}
+		else if(link_collection_nodes[collection_node_idx].CollectionType == 1) {
+			unsigned char data = 0x01;
+			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			printf("Collection (Application)\n");
+		}
+		else if (link_collection_nodes[collection_node_idx].CollectionType == 2) {
+			unsigned char data = 0x02;
+			rd_write_short_item(&data, 0b1010, rd_main_item, 1);
+			printf("Collection (Logical)\n");
+		}
+		else {
+			printf("Collection (nnn)\n");
+		}
+		// Free allocated memory
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
+				if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
+					printf("   ReportField  (Report ID %d)                   ReportSize: 1bit   ",
+						button_caps[rt_idx][caps_idx].ReportID);
+						if (rt_idx == HidP_Input) {
+						printf("Input\n");
+					}
+					else if (rt_idx == HidP_Output) {
+						printf("Output\n");
+					}
+					else if (rt_idx == HidP_Feature) {
+						printf("Feature\n");
+					}
+				}
+			}
+			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
+				if (value_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
+
+					unsigned char data = value_caps[rt_idx][caps_idx].ReportID;
+					rd_write_short_item(&data, 0b1000, rd_global_item, 1);
+					printf("Report ID (%d)\n", data);
+					if (value_caps[rt_idx][caps_idx].IsRange) {
+						data = value_caps[rt_idx][caps_idx].Range.UsageMin;
+						rd_write_short_item(&data, 0b0001, rd_local_item, 1);
+						printf("Usage Minimum (%d)\n", data);
+						data = value_caps[rt_idx][caps_idx].Range.UsageMax;
+						rd_write_short_item(&data, 0b0010, rd_local_item, 1);
+						printf("Usage Maximum (%d)\n", data);
+					} else {
+						data = value_caps[rt_idx][caps_idx].NotRange.Usage;
+						rd_write_short_item(&data, 0b0000, rd_local_item, 1);
+						printf("Usage  (%d)\n", data);
+					}
+
+					data = value_caps[rt_idx][caps_idx].LogicalMin;
+					rd_write_short_item(&data, 0b0001, rd_global_item, 1);
+					printf("Logical Minimum (%d)\n", data);
+					data = value_caps[rt_idx][caps_idx].LogicalMax;
+					rd_write_short_item(&data, 0b0010, rd_global_item, 1);
+					printf("Logical Maximum (%d)\n", data);
+
+					data = value_caps[rt_idx][caps_idx].BitSize;
+					rd_write_short_item(&data, 0b0111, rd_global_item, 1);
+					printf("Report Size (%d)\n", data);
+					data = value_caps[rt_idx][caps_idx].ReportCount;
+					rd_write_short_item(&data, 0b1001, rd_global_item, 1);
+					printf("Report Count (%d)\n", data);
+
+					if (rt_idx == HidP_Input) {
+						printf("Input\n");
+					}
+					else if (rt_idx == HidP_Output) {
+						printf("Output\n");
+					}
+					else if (rt_idx == HidP_Feature) {
+						printf("Feature\n");
+					}
+				}
+			}
+					
+		}
+		printf("End Collection\n");
+	}
+	return 0;
 }
 
 static HANDLE open_device(const char *path, BOOL open_rw)
