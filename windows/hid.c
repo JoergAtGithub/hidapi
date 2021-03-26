@@ -1,4 +1,4 @@
-/*******************************************************
+﻿/*******************************************************
  HIDAPI - Multi-Platform library for
  communication with HID devices.
 
@@ -413,20 +413,57 @@ typedef enum rd_items_ {
 /// <param name="rd_item">Enumeration identifying type (Main, Global, Local) and function (e.g Usage or Report Count) of the item.</param>
 /// <param name="bSize">Numeric expression specifying size of data (range 0-3 for 0,1,2 or 4Bytes)</param>
 /// <returns></returns>
-static int rd_write_short_item(unsigned char *data, enum RD_ITEMS rd_item, unsigned char bSize) {
-	if ((rd_item & 0x03) || (bSize > 3)) {
+static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
+	if (rd_item & 0x03) {
 		return -1; // Invaid input data
 	}
-	unsigned char oneBytePrefix = rd_item + bSize;
-
-	if (bSize == 0) {
+	if (rd_item == rd_main_collection_end) {
+		// Item without data
+		unsigned char oneBytePrefix = rd_item + 0x00;
 		printf("%02X ", oneBytePrefix);
-	} else if (bSize == 1) {
-		printf("%02X %02X ", oneBytePrefix, data[0]);
-	} else if (bSize == 2) {
-		printf("%02X %02X %02X ", oneBytePrefix, data[0], data[1]);
-	} else if(bSize == 3) {
-		printf("%02X %02X %02X %02X %02X ", oneBytePrefix, data[0], data[1], data[2], data[3]);
+	} else if ((rd_item == rd_global_logical_minimum) ||
+			   (rd_item == rd_global_logical_maximum) ||
+	      	   (rd_item == rd_global_physical_minimum) ||
+		       (rd_item == rd_global_physical_maximum)) {
+		// Item with signed integer data
+		if ((data >= -128) && (data <= 127)) {
+			unsigned char oneBytePrefix = rd_item + 0x01;
+			char localData = (char)data;
+			printf("%02X %02X ", oneBytePrefix, localData & 0xFF);
+		}
+		else if ((data >= -32768) && (data <= 32767)) {
+			unsigned char oneBytePrefix = rd_item + 0x02;
+			INT16 localData = (INT16)data;
+			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF);
+		}
+		else if ((data >= -2147483648LL) && (data <= 2147483647)) {
+			unsigned char oneBytePrefix = rd_item + 0x03;
+			INT32 localData = (INT32)data;
+			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF, localData >> 32 & 0xFF, localData >> 48 & 0xFF);
+		} else {
+			// Error data out of range
+			return -1;
+		}
+	} else {
+		// Item with unsigned integer data
+		if ((data >= 0) && (data <= 0xFF)) {
+			unsigned char oneBytePrefix = rd_item + 0x01;
+			unsigned char localData = (unsigned char)data;
+			printf("%02X %02X ", oneBytePrefix, localData & 0xFF);
+		}
+		else if ((data >= 0) && (data <= 0xFFFF)) {
+			unsigned char oneBytePrefix = rd_item + 0x02;
+			UINT16 localData = (UINT16)data;
+			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF);
+		}
+		else if ((data >= 0) && (data <= 0xFFFFFFFF)) {
+			unsigned char oneBytePrefix = rd_item + 0x03;
+			UINT16 localData = (UINT16)data;
+			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF, localData >> 32 & 0xFF, localData >> 48 & 0xFF);
+		} else {
+			// Error data out of range
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -445,18 +482,15 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, ULONG link_collection_nodes_len, PHIDP_BUTTON_CAPS* button_caps, USHORT* button_caps_len, PHIDP_VALUE_CAPS* value_caps, USHORT* value_caps_len) {
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
-			unsigned char data = 0x00;
-			rd_write_short_item(&data, rd_main_collection, 1);
+			rd_write_short_item(rd_main_collection, 0x00);
 			printf("Collection (Physical)\n");
 		}
 		else if(link_collection_nodes[collection_node_idx].CollectionType == 1) {
-			unsigned char data = 0x01;
-			rd_write_short_item(&data, rd_main_collection, 1);
+			rd_write_short_item(rd_main_collection, 0x01);
 			printf("Collection (Application)\n");
 		}
 		else if (link_collection_nodes[collection_node_idx].CollectionType == 2) {
-			unsigned char data = 0x02;
-			rd_write_short_item(&data, rd_main_collection, 1);
+			rd_write_short_item(rd_main_collection, 0x02);
 			printf("Collection (Logical)\n");
 		}
 		else {
@@ -482,50 +516,46 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
 				if (value_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
 
-					unsigned char data = value_caps[rt_idx][caps_idx].ReportID;
-					rd_write_short_item(&data, rd_global_report_id, 1);
-					printf("Report ID (%d)\n", data);
+					rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID);
+					printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
 					if (value_caps[rt_idx][caps_idx].IsRange) {
-						data = value_caps[rt_idx][caps_idx].Range.UsageMin;
-						rd_write_short_item(&data, rd_local_usage_minimum, 1);
-						printf("Usage Minimum (%d)\n", data);
-						data = value_caps[rt_idx][caps_idx].Range.UsageMax;
-						rd_write_short_item(&data, rd_local_usage_maximum, 1);
-						printf("Usage Maximum (%d)\n", data);
+						rd_write_short_item(rd_local_usage_minimum, value_caps[rt_idx][caps_idx].Range.UsageMin);
+						printf("Usage Minimum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMin);
+						rd_write_short_item(rd_local_usage_maximum, value_caps[rt_idx][caps_idx].Range.UsageMax);
+						printf("Usage Maximum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMax);
 					} else {
-						data = value_caps[rt_idx][caps_idx].NotRange.Usage;
-						rd_write_short_item(&data, rd_local_usage, 1);
-						printf("Usage  (%d)\n", data);
+						rd_write_short_item(rd_local_usage, value_caps[rt_idx][caps_idx].NotRange.Usage);
+						printf("Usage  (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
 					}
 
-					data = value_caps[rt_idx][caps_idx].LogicalMin;
-					rd_write_short_item(&data, rd_global_logical_minimum, 1);
-					printf("Logical Minimum (%d)\n", data);
-					data = value_caps[rt_idx][caps_idx].LogicalMax;
-					rd_write_short_item(&data, rd_global_logical_maximum, 1);
-					printf("Logical Maximum (%d)\n", data);
+					rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin);
+					printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
 
-					data = value_caps[rt_idx][caps_idx].BitSize;
-					rd_write_short_item(&data, rd_global_report_size, 1);
-					printf("Report Size (%d)\n", data);
-					data = value_caps[rt_idx][caps_idx].ReportCount;
-					rd_write_short_item(&data, rd_global_report_count, 1);
-					printf("Report Count (%d)\n", data);
+					rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax);
+					printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
+
+					rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize);
+					printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
+					rd_write_short_item(rd_global_report_count, value_caps[rt_idx][caps_idx].ReportCount);
+					printf("Report Count (%d)\n", value_caps[rt_idx][caps_idx].ReportCount);
 
 					if (rt_idx == HidP_Input) {
-						printf("Input\n");
+						rd_write_short_item(rd_main_input, value_caps[rt_idx][caps_idx].BitField);
+						printf("Input (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
 					}
 					else if (rt_idx == HidP_Output) {
-						printf("Output\n");
+						rd_write_short_item(rd_main_output, value_caps[rt_idx][caps_idx].BitField);
+						printf("Output (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
 					}
 					else if (rt_idx == HidP_Feature) {
-						printf("Feature\n");
+						rd_write_short_item(rd_main_feature, value_caps[rt_idx][caps_idx].BitField);
+						printf("Feature (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
 					}
 				}
 			}
 					
 		}
-		rd_write_short_item(NULL, rd_main_collection_end, 0);
+		rd_write_short_item(rd_main_collection_end, 0);
 		printf("End Collection\n");
 	}
 	return 0;
