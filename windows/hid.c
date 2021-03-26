@@ -434,12 +434,12 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 		else if ((data >= -32768) && (data <= 32767)) {
 			unsigned char oneBytePrefix = rd_item + 0x02;
 			INT16 localData = (INT16)data;
-			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF);
+			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
 		}
 		else if ((data >= -2147483648LL) && (data <= 2147483647)) {
 			unsigned char oneBytePrefix = rd_item + 0x03;
 			INT32 localData = (INT32)data;
-			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF, localData >> 32 & 0xFF, localData >> 48 & 0xFF);
+			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
 		} else {
 			// Error data out of range
 			return -1;
@@ -454,12 +454,12 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 		else if ((data >= 0) && (data <= 0xFFFF)) {
 			unsigned char oneBytePrefix = rd_item + 0x02;
 			UINT16 localData = (UINT16)data;
-			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF);
+			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
 		}
 		else if ((data >= 0) && (data <= 0xFFFFFFFF)) {
 			unsigned char oneBytePrefix = rd_item + 0x03;
-			UINT16 localData = (UINT16)data;
-			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 16 & 0xFF, localData >> 32 & 0xFF, localData >> 48 & 0xFF);
+			UINT32 localData = (UINT32)data;
+			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
 		} else {
 			// Error data out of range
 			return -1;
