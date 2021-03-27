@@ -412,10 +412,9 @@ typedef enum rd_items_ {
 /// <summary>
 ///  Writes a short report descriptor item according USB HID spec 1.11 chapter 6.2.2.2
 /// </summary>
-/// <param name="data">Optional data  (NULL if bSize is 0)</param>
 /// <param name="rd_item">Enumeration identifying type (Main, Global, Local) and function (e.g Usage or Report Count) of the item.</param>
-/// <param name="bSize">Numeric expression specifying size of data (range 0-3 for 0,1,2 or 4Bytes)</param>
-/// <returns></returns>
+/// <param name="data">Optional data</param>
+/// <returns>Returns 0 if successful, -1 for error</returns>
 static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 	if (rd_item & 0x03) {
 		return -1; // Invaid input datat
@@ -424,7 +423,7 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 	if (rd_item == rd_main_collection_end) {
 		// Item without data
 		unsigned char oneBytePrefix = rd_item + 0x00;
-		printf("%02X ", oneBytePrefix);
+		printf("%02X               ", oneBytePrefix);
 	} else if ((rd_item == rd_global_logical_minimum) ||
 			   (rd_item == rd_global_logical_maximum) ||
 	      	   (rd_item == rd_global_physical_minimum) ||
@@ -433,17 +432,17 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 		if ((data >= -128) && (data <= 127)) {
 			unsigned char oneBytePrefix = rd_item + 0x01;
 			char localData = (char)data;
-			printf("%02X %02X ", oneBytePrefix, localData & 0xFF);
+			printf("%02X %02X            ", oneBytePrefix, localData & 0xFF);
 		}
 		else if ((data >= -32768) && (data <= 32767)) {
 			unsigned char oneBytePrefix = rd_item + 0x02;
 			INT16 localData = (INT16)data;
-			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
+			printf("%02X %02X %02X         ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
 		}
 		else if ((data >= -2147483648LL) && (data <= 2147483647)) {
 			unsigned char oneBytePrefix = rd_item + 0x03;
 			INT32 localData = (INT32)data;
-			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
+			printf("%02X %02X %02X %02X %02X   ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
 		} else {
 			// Error data out of range
 			return -1;
@@ -453,17 +452,17 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 		if ((data >= 0) && (data <= 0xFF)) {
 			unsigned char oneBytePrefix = rd_item + 0x01;
 			unsigned char localData = (unsigned char)data;
-			printf("%02X %02X ", oneBytePrefix, localData & 0xFF);
+			printf("%02X %02X            ", oneBytePrefix, localData & 0xFF);
 		}
 		else if ((data >= 0) && (data <= 0xFFFF)) {
 			unsigned char oneBytePrefix = rd_item + 0x02;
 			UINT16 localData = (UINT16)data;
-			printf("%02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
+			printf("%02X %02X %02X         ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF);
 		}
 		else if ((data >= 0) && (data <= 0xFFFFFFFF)) {
 			unsigned char oneBytePrefix = rd_item + 0x03;
 			UINT32 localData = (UINT32)data;
-			printf("%02X %02X %02X %02X %02X ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
+			printf("%02X %02X %02X %02X %02X   ", oneBytePrefix, localData & 0xFF, localData >> 8 & 0xFF, localData >> 16 & 0xFF, localData >> 24 & 0xFF);
 		} else {
 			// Error data out of range
 			return -1;
@@ -521,6 +520,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 	}
 
 	UCHAR last_report_id = 0;
+	int report_count = 0;
 
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage);
@@ -552,17 +552,55 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 						printf("Report ID (%d)\n", button_caps[rt_idx][caps_idx].ReportID);
 						last_report_id = button_caps[rt_idx][caps_idx].ReportID;
 					}
-					if (rt_idx == HidP_Input) {
-						rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField);
-						printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+
+					// Print only local report items for each cap, if ReportCount > 1
+					if (button_caps[rt_idx][caps_idx].IsRange) {
+						rd_write_short_item(rd_local_usage_minimum, button_caps[rt_idx][caps_idx].Range.UsageMin);
+						printf("Usage Minimum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMin);
+						rd_write_short_item(rd_local_usage_maximum, button_caps[rt_idx][caps_idx].Range.UsageMax);
+						printf("Usage Maximum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMax);
 					}
-					else if (rt_idx == HidP_Output) {
-						rd_write_short_item(rd_main_output, button_caps[rt_idx][caps_idx].BitField);
-						printf("Output (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+					else {
+						rd_write_short_item(rd_local_usage, button_caps[rt_idx][caps_idx].NotRange.Usage);
+						printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
 					}
-					else if (rt_idx == HidP_Feature) {
-						rd_write_short_item(rd_main_feature, button_caps[rt_idx][caps_idx].BitField);
-						printf("Feature (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+
+					if (((data_idx + 1) < max_datalist_len[rt_idx]) &&
+						(dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button != -1) &&
+						(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].UsagePage == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].UsagePage) &&
+						(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].ReportID == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].ReportID) &&
+						(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].BitField == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].BitField)
+						) {
+						// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
+						report_count++;
+					}
+					else {
+
+						rd_write_short_item(rd_global_logical_minimum, 0);
+						printf("Logical Minimum (%d)\n", 0);
+
+						rd_write_short_item(rd_global_logical_maximum, 1);
+						printf("Logical Maximum (%d)\n", 1);
+
+						rd_write_short_item(rd_global_report_size, 1);
+						printf("Report Size (%d)\n", 1);
+
+						rd_write_short_item(rd_global_report_count, report_count);
+						printf("Report Count (%d)\n", report_count);
+
+						if (rt_idx == HidP_Input) {
+							rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField);
+							printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Output) {
+							rd_write_short_item(rd_main_output, button_caps[rt_idx][caps_idx].BitField);
+							printf("Output (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Feature) {
+							rd_write_short_item(rd_main_feature, button_caps[rt_idx][caps_idx].BitField);
+							printf("Feature (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+						}
+						report_count = 0;
 					}
 				}
 				caps_idx = dataindex_lut[collection_node_idx][rt_idx][data_idx].Value;
@@ -573,38 +611,75 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 						printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
 						last_report_id = value_caps[rt_idx][caps_idx].ReportID;
 					}
+
+					// Print only local report items for each cap, if ReportCount > 1
 					if (value_caps[rt_idx][caps_idx].IsRange) {
 						rd_write_short_item(rd_local_usage_minimum, value_caps[rt_idx][caps_idx].Range.UsageMin);
 						printf("Usage Minimum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMin);
 						rd_write_short_item(rd_local_usage_maximum, value_caps[rt_idx][caps_idx].Range.UsageMax);
 						printf("Usage Maximum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMax);
-					} else {
+					}
+					else {
 						rd_write_short_item(rd_local_usage, value_caps[rt_idx][caps_idx].NotRange.Usage);
-						printf("Usage  (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
+						printf("Usage (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
 					}
 
-					rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin);
-					printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
+					if (((data_idx + 1) < max_datalist_len[rt_idx]) &&
+						(dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value != -1) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].UsagePage == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].UsagePage) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].LogicalMin == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].LogicalMin) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].LogicalMax == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].LogicalMax) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].PhysicalMin == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].PhysicalMin) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].PhysicalMax == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].PhysicalMax) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].UnitsExp == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].UnitsExp) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].Units == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].Units) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitSize == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitSize) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].ReportID == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportID) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitField == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitField) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportCount == 1)
+						) {
+						// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
+						report_count++;
+					} else {
 
-					rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax);
-					printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
+						rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin);
+						printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
 
-					rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize);
-					printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
-					rd_write_short_item(rd_global_report_count, value_caps[rt_idx][caps_idx].ReportCount);
-					printf("Report Count (%d)\n", value_caps[rt_idx][caps_idx].ReportCount);
+						rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax);
+						printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
 
-					if (rt_idx == HidP_Input) {
-						rd_write_short_item(rd_main_input, value_caps[rt_idx][caps_idx].BitField);
-						printf("Input (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
-					}
-					else if (rt_idx == HidP_Output) {
-						rd_write_short_item(rd_main_output, value_caps[rt_idx][caps_idx].BitField);
-						printf("Output (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
-					}
-					else if (rt_idx == HidP_Feature) {
-						rd_write_short_item(rd_main_feature, value_caps[rt_idx][caps_idx].BitField);
-						printf("Feature (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						if ((value_caps[rt_idx][caps_idx].PhysicalMin != 0) && (value_caps[rt_idx][caps_idx].PhysicalMax != 0)) {
+							rd_write_short_item(rd_global_physical_minimum, value_caps[rt_idx][caps_idx].PhysicalMin);
+							printf("Physical Minimum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMin);
+
+							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].PhysicalMax);
+							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
+
+							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].UnitsExp);
+							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
+
+							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].Units);
+							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].Units);
+						}
+						rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize);
+						printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
+
+						rd_write_short_item(rd_global_report_count, value_caps[rt_idx][caps_idx].ReportCount + report_count);
+						printf("Report Count (%d)\n", value_caps[rt_idx][caps_idx].ReportCount + report_count);
+
+						if (rt_idx == HidP_Input) {
+							rd_write_short_item(rd_main_input, value_caps[rt_idx][caps_idx].BitField);
+							printf("Input (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Output) {
+							rd_write_short_item(rd_main_output, value_caps[rt_idx][caps_idx].BitField);
+							printf("Output (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Feature) {
+							rd_write_short_item(rd_main_feature, value_caps[rt_idx][caps_idx].BitField);
+							printf("Feature (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						report_count = 0;
 					}
 				}
 			}
