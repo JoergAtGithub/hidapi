@@ -234,7 +234,8 @@ static struct hid_api_version api_version = {
 	typedef BOOLEAN (__stdcall *HidD_SetNumInputBuffers_)(HANDLE handle, ULONG number_buffers);
 	typedef NTSTATUS (__stdcall* HidP_GetLinkCollectionNodes_)(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, PULONG link_collection_nodes_length, PHIDP_PREPARSED_DATA preparsed_data);
 	typedef NTSTATUS (__stdcall* HidP_GetButtonCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_caps, PUSHORT button_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS (__stdcall* HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef NTSTATUS(__stdcall* HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef ULONG(__stdcall* HidP_MaxDataListLength_)(HIDP_REPORT_TYPE report_type, PHIDP_PREPARSED_DATA preparsed_data);
 
 	static HidD_GetAttributes_ HidD_GetAttributes;
 	static HidD_GetSerialNumberString_ HidD_GetSerialNumberString;
@@ -251,6 +252,7 @@ static struct hid_api_version api_version = {
 	static HidP_GetLinkCollectionNodes_ HidP_GetLinkCollectionNodes;
 	static HidP_GetButtonCaps_ HidP_GetButtonCaps;
 	static HidP_GetValueCaps_ HidP_GetValueCaps;
+	static HidP_MaxDataListLength_ HidP_MaxDataListLength;
 
 	static HMODULE lib_handle = NULL;
 	static BOOLEAN initialized = FALSE;
@@ -362,6 +364,7 @@ static int lookup_functions()
 		RESOLVE(HidP_GetLinkCollectionNodes);
 		RESOLVE(HidP_GetButtonCaps);
 		RESOLVE(HidP_GetValueCaps);
+		RESOLVE(HidP_MaxDataListLength);
 #undef RESOLVE
 #if defined(__GNUC__)
 # pragma GCC diagnostic pop
@@ -479,7 +482,44 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 
 }
 
-static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, ULONG link_collection_nodes_len, PHIDP_BUTTON_CAPS* button_caps, USHORT* button_caps_len, PHIDP_VALUE_CAPS* value_caps, USHORT* value_caps_len) {
+typedef struct _RD_BUTTON_VALUE_CAP {
+	int Button;
+	int Value;
+} RD_BUTTON_VALUE_CAP;
+
+static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, ULONG link_collection_nodes_len, PHIDP_BUTTON_CAPS* button_caps, USHORT* button_caps_len, PHIDP_VALUE_CAPS* value_caps, USHORT* value_caps_len, ULONG* max_datalist_len) {
+	
+	// Create lookup tables for capability indices [COLLECTION_INDEX][INPUT/OUTPUT/FEATURE][DATA_INDEX]
+	RD_BUTTON_VALUE_CAP*** dataindex_lut;
+
+
+	dataindex_lut = malloc(link_collection_nodes_len * sizeof(*dataindex_lut));
+	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+		dataindex_lut[collection_node_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(dataindex_lut[0]));
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			dataindex_lut[collection_node_idx][rt_idx] = malloc(max_datalist_len[rt_idx] * sizeof(RD_BUTTON_VALUE_CAP));
+		}
+	}
+
+	// Initialize with -1
+	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			for (int data_idx = 0; data_idx < max_datalist_len[rt_idx]; data_idx++) {
+				dataindex_lut[collection_node_idx][rt_idx][data_idx].Button = -1;
+				dataindex_lut[collection_node_idx][rt_idx][data_idx].Value = -1;
+			}
+		}
+	}
+	
+	for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+		for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
+			dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].NotRange.DataIndex].Button = caps_idx;
+		}
+		for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
+			dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].NotRange.DataIndex].Value = caps_idx;
+		}
+	}
+
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage);
 		printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
@@ -500,12 +540,10 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 		else {
 			printf("Collection (nnn)\n");
 		}
-		// Free allocated memory
 		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-				if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
-					printf("   ReportField  (Report ID %d)                   ReportSize: 1bit   ",
-						button_caps[rt_idx][caps_idx].ReportID);
+			for (int data_idx = 0; data_idx < max_datalist_len[rt_idx]; data_idx++) {
+				int caps_idx = dataindex_lut[collection_node_idx][rt_idx][data_idx].Button;
+				if (caps_idx != -1) {
 					if (rt_idx == HidP_Input) {
 						printf("Input\n");
 					}
@@ -516,10 +554,8 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 						printf("Feature\n");
 					}
 				}
-			}
-			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
-				if (value_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
-
+				caps_idx = dataindex_lut[collection_node_idx][rt_idx][data_idx].Value;
+				if (caps_idx != -1) {
 					rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID);
 					printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
 					if (value_caps[rt_idx][caps_idx].IsRange) {
@@ -562,6 +598,13 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 		rd_write_short_item(rd_main_collection_end, 0);
 		printf("End Collection\n");
 	}
+	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			free(dataindex_lut[collection_node_idx][rt_idx]);
+		}
+		free(dataindex_lut[collection_node_idx]);
+	}
+	free(dataindex_lut);
 	return 0;
 }
 
@@ -786,6 +829,8 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 				value_caps[HidP_Feature] = (PHIDP_VALUE_CAPS)malloc(caps.NumberFeatureValueCaps * sizeof(HIDP_VALUE_CAPS));
 				value_caps_len[HidP_Feature] = caps.NumberFeatureValueCaps;
 
+				ULONG max_datalist_len[NUM_OF_HIDP_REPORT_TYPES];
+
 				if (HidP_GetLinkCollectionNodes(link_collection_nodes, &link_collection_nodes_len, pp_data) != HIDP_STATUS_SUCCESS) {
 					//register_error(dev, "HidP_GetLinkCollectionNodes: Buffer to small");
 				}
@@ -809,7 +854,10 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 				}
 				else {
 					// All data read successfull
-					parse_win32_report_description(link_collection_nodes, link_collection_nodes_len, button_caps, button_caps_len, value_caps, value_caps_len);
+					max_datalist_len[HidP_Input] = HidP_MaxDataListLength(HidP_Input, pp_data);
+					max_datalist_len[HidP_Output] = HidP_MaxDataListLength(HidP_Output, pp_data);
+					max_datalist_len[HidP_Feature] = HidP_MaxDataListLength(HidP_Feature, pp_data);
+					parse_win32_report_description(link_collection_nodes, link_collection_nodes_len, button_caps, button_caps_len, value_caps, value_caps_len, max_datalist_len);
 
 				}
 
