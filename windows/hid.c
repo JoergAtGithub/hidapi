@@ -481,6 +481,10 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 
 static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, ULONG link_collection_nodes_len, PHIDP_BUTTON_CAPS* button_caps, USHORT* button_caps_len, PHIDP_VALUE_CAPS* value_caps, USHORT* value_caps_len) {
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+		rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage);
+		printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
+		rd_write_short_item(rd_local_usage, link_collection_nodes[collection_node_idx].LinkUsage);
+		printf("Usage  (%d)\n", link_collection_nodes[collection_node_idx].LinkUsage);
 		if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
 			rd_write_short_item(rd_main_collection, 0x00);
 			printf("Collection (Physical)\n");
@@ -502,7 +506,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 				if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
 					printf("   ReportField  (Report ID %d)                   ReportSize: 1bit   ",
 						button_caps[rt_idx][caps_idx].ReportID);
-						if (rt_idx == HidP_Input) {
+					if (rt_idx == HidP_Input) {
 						printf("Input\n");
 					}
 					else if (rt_idx == HidP_Output) {
