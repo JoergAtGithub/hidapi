@@ -418,8 +418,9 @@ typedef enum rd_items_ {
 /// <returns></returns>
 static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data) {
 	if (rd_item & 0x03) {
-		return -1; // Invaid input data
+		return -1; // Invaid input datat
 	}
+
 	if (rd_item == rd_main_collection_end) {
 		// Item without data
 		unsigned char oneBytePrefix = rd_item + 0x00;
@@ -491,8 +492,6 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 	
 	// Create lookup tables for capability indices [COLLECTION_INDEX][INPUT/OUTPUT/FEATURE][DATA_INDEX]
 	RD_BUTTON_VALUE_CAP*** dataindex_lut;
-
-
 	dataindex_lut = malloc(link_collection_nodes_len * sizeof(*dataindex_lut));
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		dataindex_lut[collection_node_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(dataindex_lut[0]));
@@ -501,7 +500,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 		}
 	}
 
-	// Initialize with -1
+	// Initialize lookup table with -1
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			for (int data_idx = 0; data_idx < max_datalist_len[rt_idx]; data_idx++) {
@@ -511,6 +510,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 		}
 	}
 	
+	// Fill the lookup table where caps exist
 	for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 		for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
 			dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].NotRange.DataIndex].Button = caps_idx;
@@ -519,6 +519,8 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 			dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].NotRange.DataIndex].Value = caps_idx;
 		}
 	}
+
+	UCHAR last_report_id = 0;
 
 	for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 		rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage);
@@ -544,20 +546,33 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 			for (int data_idx = 0; data_idx < max_datalist_len[rt_idx]; data_idx++) {
 				int caps_idx = dataindex_lut[collection_node_idx][rt_idx][data_idx].Button;
 				if (caps_idx != -1) {
+					if (last_report_id != button_caps[rt_idx][caps_idx].ReportID) {
+						// Write Report ID if changed
+						rd_write_short_item(rd_global_report_id, button_caps[rt_idx][caps_idx].ReportID);
+						printf("Report ID (%d)\n", button_caps[rt_idx][caps_idx].ReportID);
+						last_report_id = button_caps[rt_idx][caps_idx].ReportID;
+					}
 					if (rt_idx == HidP_Input) {
-						printf("Input\n");
+						rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField);
+						printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
 					}
 					else if (rt_idx == HidP_Output) {
-						printf("Output\n");
+						rd_write_short_item(rd_main_output, button_caps[rt_idx][caps_idx].BitField);
+						printf("Output (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
 					}
 					else if (rt_idx == HidP_Feature) {
-						printf("Feature\n");
+						rd_write_short_item(rd_main_feature, button_caps[rt_idx][caps_idx].BitField);
+						printf("Feature (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
 					}
 				}
 				caps_idx = dataindex_lut[collection_node_idx][rt_idx][data_idx].Value;
 				if (caps_idx != -1) {
-					rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID);
-					printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
+					if (last_report_id != value_caps[rt_idx][caps_idx].ReportID) {
+						// Write Report ID if changed
+						rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID);
+						printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
+						last_report_id = value_caps[rt_idx][caps_idx].ReportID;
+					}
 					if (value_caps[rt_idx][caps_idx].IsRange) {
 						rd_write_short_item(rd_local_usage_minimum, value_caps[rt_idx][caps_idx].Range.UsageMin);
 						printf("Usage Minimum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMin);
