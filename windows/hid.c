@@ -380,7 +380,7 @@ static int lookup_functions()
 
 typedef enum rd_items_ {
 	rd_main_input =			      0x80, ///< 1000 00 nn
-	rd_main_output =			  0x81, ///< 1001 00 nn
+	rd_main_output =			  0x90, ///< 1001 00 nn
 	rd_main_feature =			  0xB0, ///< 1011 00 nn
 	rd_main_collection =		  0xA0, ///< 1010 00 nn
 	rd_main_collection_end =	  0xC0, ///< 1100 00 nn
@@ -512,10 +512,18 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 	// Fill the lookup table where caps exist
 	for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 		for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-			dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].NotRange.DataIndex].Button = caps_idx;
+			if (button_caps[rt_idx][caps_idx].IsRange) {
+				dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].Range.DataIndexMin].Button = caps_idx;
+			} else {
+				dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].NotRange.DataIndex].Button = caps_idx;
+			}
 		}
 		for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
-			dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].NotRange.DataIndex].Value = caps_idx;
+			if (value_caps[rt_idx][caps_idx].IsRange) {
+				dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].Range.DataIndexMin].Value = caps_idx;
+			} else {
+				dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].NotRange.DataIndex].Value = caps_idx;
+			}
 		}
 	}
 
@@ -555,6 +563,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 
 					// Print only local report items for each cap, if ReportCount > 1
 					if (button_caps[rt_idx][caps_idx].IsRange) {
+						report_count += (button_caps[rt_idx][caps_idx].Range.DataIndexMax - button_caps[rt_idx][caps_idx].Range.DataIndexMin);
 						rd_write_short_item(rd_local_usage_minimum, button_caps[rt_idx][caps_idx].Range.UsageMin);
 						printf("Usage Minimum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMin);
 						rd_write_short_item(rd_local_usage_maximum, button_caps[rt_idx][caps_idx].Range.UsageMax);
@@ -563,7 +572,7 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 					else {
 						rd_write_short_item(rd_local_usage, button_caps[rt_idx][caps_idx].NotRange.Usage);
 						printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
-					}
+					}					
 
 					if (((data_idx + 1) < max_datalist_len[rt_idx]) &&
 						(dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button != -1) &&
@@ -576,6 +585,9 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 					}
 					else {
 
+						rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage);
+						printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
+
 						rd_write_short_item(rd_global_logical_minimum, 0);
 						printf("Logical Minimum (%d)\n", 0);
 
@@ -585,8 +597,8 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 						rd_write_short_item(rd_global_report_size, 1);
 						printf("Report Size (%d)\n", 1);
 
-						rd_write_short_item(rd_global_report_count, report_count);
-						printf("Report Count (%d)\n", report_count);
+						rd_write_short_item(rd_global_report_count, 1 + report_count);
+						printf("Report Count (%d)\n", 1 + report_count);
 
 						if (rt_idx == HidP_Input) {
 							rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField);
@@ -636,11 +648,15 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitSize == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitSize) &&
 						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].ReportID == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportID) &&
 						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitField == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitField) &&
+						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].ReportCount == 1) &&
 						(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportCount == 1)
 						) {
 						// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
 						report_count++;
 					} else {
+
+						rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage);
+						printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
 
 						rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin);
 						printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
@@ -653,13 +669,13 @@ static int parse_win32_report_description(PHIDP_LINK_COLLECTION_NODE link_collec
 							printf("Physical Minimum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMin);
 
 							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].PhysicalMax);
-							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
+							printf("Physical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
 
 							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].UnitsExp);
-							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
+							printf("Unit Exponent (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
 
 							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].Units);
-							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].Units);
+							printf("Unit (%d)\n", value_caps[rt_idx][caps_idx].Units);
 						}
 						rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize);
 						printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
