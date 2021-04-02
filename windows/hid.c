@@ -538,6 +538,7 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 
 }
 
+
 static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_cap, int* first_bit, int* last_bit, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
 	unsigned char* dummy_report;
 
@@ -660,10 +661,47 @@ typedef struct _RD_BIT_RANGE {
 	int LastBit;
 } RD_BIT_RANGE;
 
+
+struct rd_main_item_node
+{
+	int FirstBit; ///< Position of first bit in report (counting from 0)
+	int LastBit; ///< Position of last bit in report (counting from 0)
+	BOOLEAN IsButton;
+	int CapsIndex; ///< Index in the array of button_caps or value caps
+	int CollectionIndex; ///< Index in the array of link collections
+	HIDP_REPORT_TYPE ReportType; ///< Input, Output or Feature
+	unsigned char ReportID; 
+	struct rd_main_item_node* next; 
+};
+
+
+static void rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, HIDP_REPORT_TYPE report_type, unsigned char report_id, struct rd_main_item_node** list) {
+	struct rd_main_item_node* new_list_node;
+
+	/* Determine last node in the list */
+	while (*list != NULL)
+	{
+		list = &(*list)->next;
+	}
+
+	new_list_node = malloc(sizeof(*new_list_node)); // Create new list entry
+	new_list_node->FirstBit = first_bit;
+	new_list_node->LastBit= last_bit;
+	new_list_node->IsButton = is_button;
+	new_list_node->CapsIndex = caps_index;
+	new_list_node->CollectionIndex = collection_index;
+	new_list_node->ReportType = report_type;
+	new_list_node->ReportID = report_id;
+	new_list_node->next = NULL; // NULL marks last node in the list
+
+	*list = new_list_node;
+}
+
 static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned char **report_descriptor, unsigned int *report_descriptor_len) {
-			
+
 	struct rd_item_byte* byte_list = NULL;
 	HIDP_CAPS caps;
+
 
 	if (HidP_GetCaps(pp_data, &caps) != HIDP_STATUS_SUCCESS) {
 		return -1;
@@ -725,21 +763,75 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		max_datalist_len[HidP_Feature] = caps.FeatureReportByteLength;
 
 
-		// Create lookup tables for report bitpositions [COLLECTION_INDEX][REPORT_ID][INPUT/OUTPUT/FEATURE]
-		RD_BIT_RANGE**** bitpos_lut;
-		bitpos_lut = malloc(link_collection_nodes_len * sizeof(*bitpos_lut));
+		// Create lookup tables for the bit range each report per collection (position of first bit and last bit in each collection)
+		// [COLLECTION_INDEX][REPORT_ID][INPUT/OUTPUT/FEATURE]
+		RD_BIT_RANGE**** coll_bit_range;
+		coll_bit_range = malloc(link_collection_nodes_len * sizeof(*coll_bit_range));
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-			bitpos_lut[collection_node_idx] = malloc(256 * sizeof(bitpos_lut[0])); // 256 possible report IDs (incl. 0x00)
+			coll_bit_range[collection_node_idx] = malloc(256 * sizeof(coll_bit_range[0])); // 256 possible report IDs (incl. 0x00)
 			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
-				bitpos_lut[collection_node_idx][reportid_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(bitpos_lut[0][0]));
+				coll_bit_range[collection_node_idx][reportid_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(coll_bit_range[0][0]));
 				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-					bitpos_lut[collection_node_idx][reportid_idx][rt_idx] = malloc(sizeof(RD_BIT_RANGE));
-					bitpos_lut[collection_node_idx][reportid_idx][rt_idx]->FirstBit = -1;
-					bitpos_lut[collection_node_idx][reportid_idx][rt_idx]->LastBit = -1;
+					coll_bit_range[collection_node_idx][reportid_idx][rt_idx] = malloc(sizeof(RD_BIT_RANGE));
+					coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->FirstBit = -1;
+					coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->LastBit = -1;
+					// IsButton and CapIndex are not used in this lookup table
 				}
 			}
 		}
 
+
+		struct rd_main_item_node** main_item_list;
+
+		main_item_list = (struct rd_main_item_node**) malloc(link_collection_nodes_len * sizeof(main_item_list));
+		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+			main_item_list[collection_node_idx] = NULL; // One list root per collection
+		}
+
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
+				// Add all button caps to node list
+				for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
+					int first_bit, last_bit;
+					rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+					rd_append_main_item_node(first_bit, last_bit, TRUE, caps_idx, button_caps[rt_idx][caps_idx].LinkCollection, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &main_item_list[button_caps[rt_idx][caps_idx].LinkCollection]);
+				}
+				// Add all value caps to node list
+				for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
+					int first_bit, last_bit;
+					rd_determine_value_bitpositions(rt_idx, &value_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+					rd_append_main_item_node(first_bit, last_bit, TRUE, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &main_item_list[value_caps[rt_idx][caps_idx].LinkCollection]);
+				}
+			}
+		}
+
+
+
+		// Create lookup tables capabilities sorted by bit position
+		// [INPUT/OUTPUT/FEATURE][ReportID][Capability]
+		//RD_BUTTON_VALUE_CAP*** sorted_caps;
+		//sorted_caps = malloc(link_collection_nodes_len * sizeof(*sorted_caps));
+		//for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+		//	sorted_caps = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(sorted_caps[0]));
+		//	sorted_caps[rt_idx] = malloc(256 * sizeof(sorted_caps[0])); // 256 possible report IDs (incl. 0x00)
+		//	for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
+		//		unsigned int searched_bit = 0;
+		//		sorted_caps[rt_idx][reportid_idx] = malloc((button_caps_len[rt_idx] + value_caps_len[rt_idx]) * sizeof(sorted_caps[0][0]));
+		//		for (unsigned short data_idx = 0; data_idx < (button_caps_len[rt_idx] + value_caps_len[rt_idx]); data_idx++) {
+		//			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
+		//				if (button_caps[rt_idx][caps_idx].ReportID == reportid_idx) {
+		//					int first_bit, last_bit;
+		//					rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+		//					if (searched_bit == first_bit) {
+		//						// Found
+		//					}
+		//				}
+		//				
+		//			}
+
+		//		}
+		//	}
+		//}
 
 
 		// Fill the lookup table where caps exist
@@ -747,14 +839,24 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
 				int first_bit, last_bit;
 				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-				bitpos_lut[ button_caps[rt_idx][caps_idx].LinkCollection ][ button_caps[rt_idx][caps_idx].ReportID ][rt_idx]->FirstBit = first_bit;
-				bitpos_lut[ button_caps[rt_idx][caps_idx].LinkCollection ][ button_caps[rt_idx][caps_idx].ReportID ][rt_idx]->LastBit = last_bit;
+				if (coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit == -1 ||
+					coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit > first_bit) {
+					coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit = first_bit;
+				}
+				if (coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit < last_bit) {
+					coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit = last_bit;
+				}
 			}
 			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
 				int first_bit, last_bit;
 				rd_determine_value_bitpositions(rt_idx, &value_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-				bitpos_lut[ value_caps[rt_idx][caps_idx].LinkCollection ][ value_caps[rt_idx][caps_idx].ReportID ][rt_idx]->FirstBit = first_bit;
-				bitpos_lut[ value_caps[rt_idx][caps_idx].LinkCollection ][ value_caps[rt_idx][caps_idx].ReportID ][rt_idx]->LastBit = last_bit;
+				if (coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit == -1 ||
+					coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit > first_bit) {
+					coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit = first_bit;
+				}
+				if (coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit < last_bit) {
+					coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit = last_bit;
+				}
 			}
 		}
 
@@ -987,13 +1089,13 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
 				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-					free(bitpos_lut[collection_node_idx][reportid_idx][rt_idx]);
+					free(coll_bit_range[collection_node_idx][reportid_idx][rt_idx]);
 				}
-				free(bitpos_lut[collection_node_idx][reportid_idx]);
+				free(coll_bit_range[collection_node_idx][reportid_idx]);
 			}
-			free(bitpos_lut[collection_node_idx]);
+			free(coll_bit_range[collection_node_idx]);
 		}
-		free(bitpos_lut);
+		free(coll_bit_range);
 	}
 
 	// Copy report temporary descriptor list into byte array
