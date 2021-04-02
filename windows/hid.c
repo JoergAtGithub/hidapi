@@ -238,14 +238,14 @@ static struct hid_api_version api_version = {
 	typedef BOOLEAN (__stdcall *HidD_GetIndexedString_)(HANDLE handle, ULONG string_index, PVOID buffer, ULONG buffer_len);
 	typedef BOOLEAN (__stdcall *HidD_GetPreparsedData_)(HANDLE handle, PHIDP_PREPARSED_DATA *preparsed_data);
 	typedef BOOLEAN (__stdcall *HidD_FreePreparsedData_)(PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS (__stdcall* HidP_GetCaps_)(PHIDP_PREPARSED_DATA preparsed_data, HIDP_CAPS *caps);
+	typedef NTSTATUS (__stdcall *HidP_GetCaps_)(PHIDP_PREPARSED_DATA preparsed_data, HIDP_CAPS *caps);
 	typedef BOOLEAN (__stdcall *HidD_SetNumInputBuffers_)(HANDLE handle, ULONG number_buffers);
-	typedef NTSTATUS (__stdcall* HidP_GetLinkCollectionNodes_)(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, PULONG link_collection_nodes_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS (__stdcall* HidP_GetButtonCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_caps, PUSHORT button_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS(__stdcall* HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS(__stdcall* HidP_SetData_)(HIDP_REPORT_TYPE report_type, PHIDP_DATA data_list, PULONG data_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_SetUsageValueArray_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, USAGE usage, PCHAR usage_value,	USHORT usage_value_byte_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-		
+	typedef NTSTATUS (__stdcall *HidP_GetLinkCollectionNodes_)(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, PULONG link_collection_nodes_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef NTSTATUS (__stdcall *HidP_GetButtonCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_caps, PUSHORT button_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef NTSTATUS(__stdcall *HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef NTSTATUS(__stdcall *HidP_SetData_)(HIDP_REPORT_TYPE report_type, PHIDP_DATA data_list, PULONG data_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+	typedef NTSTATUS(__stdcall *HidP_SetUsageValueArray_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, USAGE usage, PCHAR usage_value,	USHORT usage_value_byte_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+
 	static HidD_GetAttributes_ HidD_GetAttributes;
 	static HidD_GetSerialNumberString_ HidD_GetSerialNumberString;
 	static HidD_GetManufacturerString_ HidD_GetManufacturerString;
@@ -267,7 +267,6 @@ static struct hid_api_version api_version = {
 	static HMODULE lib_handle = NULL;
 	static BOOLEAN initialized = FALSE;
 #endif /* HIDAPI_USE_DDK */
-
 
 struct hid_device_ {
 		HANDLE device_handle;
@@ -1137,7 +1136,7 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 		/* Check the VID/PID to see if we should add this
 		   device to the enumeration list. */
 		if ((vendor_id == 0x0 || attrib.VendorID == vendor_id) &&
-			(product_id == 0x0 || attrib.ProductID == product_id)) {
+		    (product_id == 0x0 || attrib.ProductID == product_id)) {
 
 			#define WSTR_LEN 512
 			const char *str;
@@ -1280,6 +1279,7 @@ void  HID_API_EXPORT HID_API_CALL hid_free_enumeration(struct hid_device_info *d
 		d = next;
 	}
 }
+
 
 HID_API_EXPORT hid_device * HID_API_CALL hid_open(unsigned short vendor_id, unsigned short product_id, const wchar_t *serial_number)
 {
