@@ -804,34 +804,6 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		}
 
 
-
-		// Create lookup tables capabilities sorted by bit position
-		// [INPUT/OUTPUT/FEATURE][ReportID][Capability]
-		//RD_BUTTON_VALUE_CAP*** sorted_caps;
-		//sorted_caps = malloc(link_collection_nodes_len * sizeof(*sorted_caps));
-		//for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-		//	sorted_caps = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(sorted_caps[0]));
-		//	sorted_caps[rt_idx] = malloc(256 * sizeof(sorted_caps[0])); // 256 possible report IDs (incl. 0x00)
-		//	for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
-		//		unsigned int searched_bit = 0;
-		//		sorted_caps[rt_idx][reportid_idx] = malloc((button_caps_len[rt_idx] + value_caps_len[rt_idx]) * sizeof(sorted_caps[0][0]));
-		//		for (unsigned short data_idx = 0; data_idx < (button_caps_len[rt_idx] + value_caps_len[rt_idx]); data_idx++) {
-		//			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-		//				if (button_caps[rt_idx][caps_idx].ReportID == reportid_idx) {
-		//					int first_bit, last_bit;
-		//					rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-		//					if (searched_bit == first_bit) {
-		//						// Found
-		//					}
-		//				}
-		//				
-		//			}
-
-		//		}
-		//	}
-		//}
-
-
 		// Fill the lookup table where caps exist
 		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
@@ -854,46 +826,6 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				}
 				if (coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit < last_bit) {
 					coll_bit_range[value_caps[rt_idx][caps_idx].LinkCollection][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->LastBit = last_bit;
-				}
-			}
-		}
-
-		// Create lookup tables for capability indices [COLLECTION_INDEX][INPUT/OUTPUT/FEATURE][DATA_INDEX]
-		RD_BUTTON_VALUE_CAP*** dataindex_lut;
-		dataindex_lut = malloc(link_collection_nodes_len * sizeof(*dataindex_lut));
-		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-			dataindex_lut[collection_node_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(dataindex_lut[0]));
-			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-				dataindex_lut[collection_node_idx][rt_idx] = malloc(max_datalist_len[rt_idx] * sizeof(RD_BUTTON_VALUE_CAP));
-			}
-		}
-
-		// Initialize lookup table with -1
-		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-				for (unsigned int data_idx = 0; data_idx < max_datalist_len[rt_idx]; data_idx++) {
-					dataindex_lut[collection_node_idx][rt_idx][data_idx].Button = -1;
-					dataindex_lut[collection_node_idx][rt_idx][data_idx].Value = -1;
-				}
-			}
-		}
-
-		// Fill the lookup table where caps exist
-		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-				if (button_caps[rt_idx][caps_idx].IsRange) {
-					dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].Range.DataIndexMin].Button = caps_idx;
-				}
-				else {
-					dataindex_lut[button_caps[rt_idx][caps_idx].LinkCollection][rt_idx][button_caps[rt_idx][caps_idx].NotRange.DataIndex].Button = caps_idx;
-				}
-			}
-			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
-				if (value_caps[rt_idx][caps_idx].IsRange) {
-					dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].Range.DataIndexMin].Value = caps_idx;
-				}
-				else {
-					dataindex_lut[value_caps[rt_idx][caps_idx].LinkCollection][rt_idx][value_caps[rt_idx][caps_idx].NotRange.DataIndex].Value = caps_idx;
 				}
 			}
 		}
@@ -1086,13 +1018,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				main_item_list[collection_node_idx] = main_item_list[collection_node_idx]->next;
 			}
 		}
-		/*for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-				free(dataindex_lut[collection_node_idx][rt_idx]);
-			}
-			free(dataindex_lut[collection_node_idx]);
-		}*/
-		free(dataindex_lut);
+		
 
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
