@@ -799,7 +799,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
 				int first_bit, last_bit;
 				rd_determine_value_bitpositions(rt_idx, &value_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-				rd_append_main_item_node(first_bit, last_bit, TRUE, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &main_item_list[value_caps[rt_idx][caps_idx].LinkCollection]);
+				rd_append_main_item_node(first_bit, last_bit, FALSE, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &main_item_list[value_caps[rt_idx][caps_idx].LinkCollection]);
 			}
 		}
 
@@ -951,16 +951,16 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 								printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
 							}
 
-							/*if (((data_idx + 1) < max_datalist_len[rt_idx]) &&
-								(dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button != -1) &&
-								(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].UsagePage == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].UsagePage) &&
-								(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].ReportID == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].ReportID) &&
-								(button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Button].BitField == button_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Button].BitField)
+							if ((main_item_list[collection_node_idx]->next != NULL) &&
+								(main_item_list[collection_node_idx]->next->IsButton == TRUE) &&
+								(button_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].UsagePage == button_caps[rt_idx][caps_idx].UsagePage) &&
+								(button_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].ReportID == button_caps[rt_idx][caps_idx].ReportID) &&
+								(button_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].BitField == button_caps[rt_idx][caps_idx].BitField)
 								) {
 								// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
 								report_count++;
 							}
-							else*/ {
+							else {
 
 								rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage, &byte_list);
 								printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
@@ -1013,26 +1013,26 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 								rd_write_short_item(rd_local_usage, value_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
 								printf("Usage (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
 							}
-							/*
-							if (((data_idx + 1) < max_datalist_len[rt_idx]) &&
-								(dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value != -1) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].UsagePage == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].UsagePage) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].LogicalMin == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].LogicalMin) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].LogicalMax == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].LogicalMax) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].PhysicalMin == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].PhysicalMin) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].PhysicalMax == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].PhysicalMax) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].UnitsExp == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].UnitsExp) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].Units == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].Units) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitSize == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitSize) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].ReportID == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportID) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].BitField == value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].BitField) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx + 1].Value].ReportCount == 1) &&
-								(value_caps[rt_idx][dataindex_lut[collection_node_idx][rt_idx][data_idx].Value].ReportCount == 1)
+							
+							if ((main_item_list[collection_node_idx]->next != NULL) &&
+								(main_item_list[collection_node_idx]->next->IsButton == FALSE) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].UsagePage == value_caps[rt_idx][caps_idx].UsagePage) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].LogicalMin == value_caps[rt_idx][caps_idx].LogicalMin) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].LogicalMax == value_caps[rt_idx][caps_idx].LogicalMax) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].PhysicalMin == value_caps[rt_idx][caps_idx].PhysicalMin) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].PhysicalMax == value_caps[rt_idx][caps_idx].PhysicalMax) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].UnitsExp == value_caps[rt_idx][caps_idx].UnitsExp) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].Units == value_caps[rt_idx][caps_idx].Units) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].BitSize == value_caps[rt_idx][caps_idx].BitSize) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].ReportID == value_caps[rt_idx][caps_idx].ReportID) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].BitField == value_caps[rt_idx][caps_idx].BitField) &&
+								(value_caps[main_item_list[collection_node_idx]->next->ReportType][main_item_list[collection_node_idx]->next->CapsIndex].ReportCount == 1) &&
+								(value_caps[rt_idx][caps_idx].ReportCount == 1)
 								) {
 								// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
 								report_count++;
 							}
-							else*/ {
+							else {
 
 								rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage, &byte_list);
 								printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
