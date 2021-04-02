@@ -16,6 +16,7 @@ mac/Makefile.in
 missing
 testgui/Makefile.in
 windows/Makefile.in
+*.txt
 
 Makefile
 stamp-h1
