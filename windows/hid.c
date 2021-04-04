@@ -831,12 +831,15 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		}
 
 		UCHAR last_report_id = 0;
+		USAGE last_usage_page = 0;
 		int report_count = 0;
 
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-
-			rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage, &byte_list);
-			printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
+			if (last_usage_page != link_collection_nodes[collection_node_idx].LinkUsagePage) {
+				rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage, &byte_list);
+				printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
+				last_usage_page = link_collection_nodes[collection_node_idx].LinkUsagePage;
+			}
 			rd_write_short_item(rd_local_usage, link_collection_nodes[collection_node_idx].LinkUsage, &byte_list);
 			printf("Usage  (%d)\n", link_collection_nodes[collection_node_idx].LinkUsage);
 			if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
@@ -859,7 +862,6 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				int rt_idx = main_item_list[collection_node_idx]->ReportType;
 				int	caps_idx = main_item_list[collection_node_idx]->CapsIndex;
 				UCHAR report_id = main_item_list[collection_node_idx]->ReportID;
-				printf("#### %d    %d         %d   %d  ####\n", collection_node_idx, report_id, main_item_list[collection_node_idx]->FirstBit, main_item_list[collection_node_idx]->LastBit);
 
 					if (main_item_list[collection_node_idx]->IsButton) {
 						if (caps_idx != -1) {
@@ -893,9 +895,11 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 								report_count++;
 							}
 							else {
-
-								rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage, &byte_list);
-								printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
+								if (button_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
+									rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage, &byte_list);
+									printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
+									last_usage_page = button_caps[rt_idx][caps_idx].UsagePage;
+								}
 
 								rd_write_short_item(rd_global_logical_minimum, 0, &byte_list);
 								printf("Logical Minimum (%d)\n", 0);
@@ -966,8 +970,11 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 							}
 							else {
 
-								rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage, &byte_list);
-								printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
+								if (value_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
+									rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage, &byte_list);
+									printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
+									last_usage_page = value_caps[rt_idx][caps_idx].UsagePage;
+								}
 
 								rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin, &byte_list);
 								printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
