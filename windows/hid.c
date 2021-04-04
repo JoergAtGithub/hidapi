@@ -807,10 +807,10 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		}
 
 
-		// Determine hirachy levels of collections
+		// Determine hierachy levels of collections
 		unsigned int max_coll_level = 0;
-		int** coll_levels;
-		coll_levels = malloc(link_collection_nodes_len * sizeof(*coll_levels));
+		int* coll_levels;
+		coll_levels = malloc(link_collection_nodes_len * sizeof(coll_levels[0]));
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 			coll_levels[collection_node_idx] = -1;
 		}
@@ -840,6 +840,31 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				}
 			}
 		}
+
+		// Propagate the bit range of each report from the child collections to their parent and store the merged result for the parent
+		for (int actual_coll_level = max_coll_level - 1; actual_coll_level >= 0; actual_coll_level--) {
+			for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
+				if (coll_levels[collection_node_idx] == actual_coll_level) {
+					USHORT child_idx = link_collection_nodes[collection_node_idx].FirstChild;
+					while (child_idx) {
+						for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
+							for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+								// Merge bit range from childs
+								if ((coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit != -1) &&
+									(coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->FirstBit > coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit)) {
+									coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->FirstBit = coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit;
+								}
+								if (coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->LastBit < coll_bit_range[child_idx][reportid_idx][rt_idx]->LastBit) {
+									coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->LastBit = coll_bit_range[child_idx][reportid_idx][rt_idx]->LastBit;
+								}
+								child_idx = link_collection_nodes[child_idx].NextSibling;
+							}
+						}
+					}
+				}
+			}
+		}
+		
 
 		// Create one unsorted list per collection, containing
 		// the report descriptor Input/Output/Feature main items
