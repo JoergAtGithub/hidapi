@@ -868,7 +868,66 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				}
 			}
 		}
-		
+
+
+		// ************************************************************************************************
+		// Determine child collection order of the whole hierachy based on previously determined bit ranges
+		// ************************************************************************************************
+
+		int** coll_child_order;
+		coll_child_order = malloc(link_collection_nodes_len * sizeof(*coll_child_order));
+		{
+			int actual_coll_level = 0;
+			USHORT collection_node_idx = 0;
+			while (actual_coll_level >= 0) {
+				if (link_collection_nodes[collection_node_idx].NumberOfChildren == 0) {
+					coll_child_order[collection_node_idx] = NULL; // This collection has no child collections
+				}
+				else if (coll_levels[link_collection_nodes[collection_node_idx].FirstChild] == -1) {
+					coll_child_order[collection_node_idx] = malloc(link_collection_nodes[collection_node_idx].NumberOfChildren * sizeof(coll_child_order[0]));
+
+					{
+						// Create unsorted list of child collection indices
+						USHORT child_idx = link_collection_nodes[collection_node_idx].FirstChild;
+						int child_count = link_collection_nodes[collection_node_idx].NumberOfChildren;
+						while (child_count > 0) {
+							coll_child_order[collection_node_idx][child_count] = child_idx;
+							child_idx = link_collection_nodes[child_idx].NextSibling;
+							child_count--;
+						}
+					}
+
+					if (link_collection_nodes[collection_node_idx].NumberOfChildren > 1) {
+						// Sort child collections indices by bit positions
+						for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+							for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
+								for (int child_idx = 1; child_idx < link_collection_nodes[collection_node_idx].NumberOfChildren; child_idx++) {
+									if ((coll_bit_range[child_idx - 1][reportid_idx][rt_idx]->FirstBit != -1) &&
+									   (coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit != -1) &&
+									   (coll_bit_range[child_idx - 1][reportid_idx][rt_idx]->FirstBit > coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit)) {
+										// Swap position indices of the two compared child collections
+										int idx_latch = coll_child_order[collection_node_idx][child_idx - 1];
+										coll_child_order[collection_node_idx][child_idx - 1] = coll_child_order[collection_node_idx][child_idx];
+										coll_child_order[collection_node_idx][child_idx] = idx_latch;
+									}
+								}
+							}
+						}
+					}
+
+					collection_node_idx = link_collection_nodes[collection_node_idx].FirstChild;
+				}
+				else if (link_collection_nodes[collection_node_idx].NextSibling != 0) {
+					collection_node_idx = link_collection_nodes[collection_node_idx].NextSibling;
+				}
+				else {
+					actual_coll_level--;
+					if (actual_coll_level >= 0) {
+						collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
+					}
+				}
+			}
+		}
 
 		// Create one unsorted list per collection, containing
 		// the report descriptor Input/Output/Feature main items
