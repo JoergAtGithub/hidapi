@@ -1163,13 +1163,24 @@ free(coll_last_written_child);
 					// INPUT, OUTPUT or FEATURE
 					if (list->FirstBit != -1) {
 						if (last_bit_position[list->MainItemType][list->ReportID] + 1 != list->FirstBit) {
-							rd_insert_main_item_node(last_bit_position[list->MainItemType][list->ReportID], last_bit_position[list->MainItemType][list->ReportID], list->FirstBit-1, TRUE, -1, 0, list->MainItemType, list->ReportID, &last_report_item_lookup[list->MainItemType][list->ReportID]);
+							rd_insert_main_item_node(last_bit_position[list->MainItemType][list->ReportID], last_bit_position[list->MainItemType][list->ReportID], list->FirstBit - 1, TRUE, -1, 0, list->MainItemType, list->ReportID, &last_report_item_lookup[list->MainItemType][list->ReportID]);
 						}
 						last_bit_position[list->MainItemType][list->ReportID] = list->LastBit;
 						last_report_item_lookup[list->MainItemType][list->ReportID] = list;
 					}
 				}
 				list = list->next;
+			}
+			// Add 8 bit padding at each report end
+			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+				for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
+					if (last_bit_position[rt_idx][reportid_idx] != -1) {
+						int padding = 8 - ((last_bit_position[rt_idx][reportid_idx] + 1) % 8);
+						if (padding < 8) {
+							rd_insert_main_item_node(last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx] + padding, TRUE, -1, 0, rt_idx, reportid_idx, &last_report_item_lookup[rt_idx][reportid_idx]);
+						}
+					}
+				}
 			}
 		}
 
