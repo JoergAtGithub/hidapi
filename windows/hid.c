@@ -1193,6 +1193,10 @@ free(coll_last_written_child);
 		// ***********************************
 		UCHAR last_report_id = 0;
 		USAGE last_usage_page = 0;
+		LONG last_physical_min = 0;// If both, Physical Minimum and Physical Maximum are 0, the logical limits should be taken as physical limits according USB HID spec 1.11 chapter 6.2.2.7
+		LONG last_physical_max = 0;
+		ULONG last_unit_exponent = 0; // If Unit Exponent is Undefined it should be considered as 0 according USB HID spec 1.11 chapter 6.2.2.7
+		ULONG last_unit = 0; // If the first nibble is 7, or second nibble of Unit is 0, the unit is None according USB HID spec 1.11 chapter 6.2.2.7
 		int report_count = 0;
 		while (main_item_list != NULL)
 		{
@@ -1376,19 +1380,33 @@ free(coll_last_written_child);
 							rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax, &byte_list);
 							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
 
-							if ((value_caps[rt_idx][caps_idx].PhysicalMin != 0) && (value_caps[rt_idx][caps_idx].PhysicalMax != 0)) {
+							if ((last_physical_min != value_caps[rt_idx][caps_idx].PhysicalMin) ||
+								(last_physical_max != value_caps[rt_idx][caps_idx].PhysicalMax)) {
+								// Write Physical Min and Max only if one of them changed
 								rd_write_short_item(rd_global_physical_minimum, value_caps[rt_idx][caps_idx].PhysicalMin, &byte_list);
 								printf("Physical Minimum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMin);
+								last_physical_min = value_caps[rt_idx][caps_idx].PhysicalMin;
 
 								rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].PhysicalMax, &byte_list);
 								printf("Physical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
-
-								rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].UnitsExp, &byte_list);
-								printf("Unit Exponent (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
-
-								rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].Units, &byte_list);
-								printf("Unit (%d)\n", value_caps[rt_idx][caps_idx].Units);
+								last_physical_max = value_caps[rt_idx][caps_idx].PhysicalMax;
 							}
+							
+
+							if (last_unit_exponent != value_caps[rt_idx][caps_idx].UnitsExp) {
+								// Write Unit Exponent only if changed
+								rd_write_short_item(rd_global_unit_exponent, value_caps[rt_idx][caps_idx].UnitsExp, &byte_list);
+								printf("Unit Exponent (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
+								last_unit_exponent = value_caps[rt_idx][caps_idx].UnitsExp;
+							}
+
+							if (last_unit != value_caps[rt_idx][caps_idx].Units) {
+								// Write Unit only if changed
+								rd_write_short_item(rd_global_unit, value_caps[rt_idx][caps_idx].Units, &byte_list);
+								printf("Unit (%d)\n", value_caps[rt_idx][caps_idx].Units);
+								last_unit = value_caps[rt_idx][caps_idx].Units;
+							}
+
 							rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize, &byte_list);
 							printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
 
