@@ -679,7 +679,7 @@ struct rd_main_item_node
 };
 
 
-static void rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
+static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
 	struct rd_main_item_node* new_list_node;
 
 	/* Determine last node in the list */
@@ -699,6 +699,7 @@ static void rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_but
 	new_list_node->next = NULL; // NULL marks last node in the list
 
 	*list = new_list_node;
+	return new_list_node;
 }
 
 static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned char **report_descriptor, unsigned int *report_descriptor_len) {
@@ -947,13 +948,15 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 			free(coll_parsed_flag);
 		}
 
-		// ******************************************************************
-		// Create sorted list containing all the report descriptor main items
-		// incl. Input/Output/Feature with reconstructed bit positions
-		// ******************************************************************
+		// *****************************************************************************
+		// Create sorted list containing all the Collection and CollectionEnd main items
+		// *****************************************************************************
 		struct rd_main_item_node* main_item_list;
 		main_item_list = (struct rd_main_item_node*)malloc(sizeof(main_item_list));
 		main_item_list = NULL; // List root
+		// Lookup table to find the Collection items in the list by index
+		struct rd_main_item_node** main_item_list_lookup;
+		main_item_list_lookup = malloc(link_collection_nodes_len * sizeof(*main_item_list_lookup));
 		{
 			int* coll_last_written_child;
 			coll_last_written_child = malloc(link_collection_nodes_len * sizeof(coll_last_written_child[0]));
@@ -963,13 +966,13 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 
 			int actual_coll_level = 0;
 			USHORT collection_node_idx = 0;
-			rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+			main_item_list_lookup[0] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 			while (actual_coll_level >= 0) {
 				if ((coll_number_of_direct_childs[collection_node_idx] != 0) &&
 					(coll_last_written_child[collection_node_idx] == -1)) {
 					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][0];
 					collection_node_idx = coll_child_order[collection_node_idx][0];
-					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					main_item_list_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 					actual_coll_level++;
 					
 
@@ -982,7 +985,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					}
 					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][nextChild];
 					collection_node_idx = coll_child_order[collection_node_idx][nextChild];
-					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					main_item_list_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 					actual_coll_level++;
 				}
 				else {
@@ -995,6 +998,10 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		}
 
 
+		// ******************************************************
+		// Inserted Input/Output/Feature main items into the list
+		// in order of reconstructed bit positions
+		// ******************************************************
 
 
 		// This collection has no child collections
@@ -1229,9 +1236,12 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				free(coll_bit_range[collection_node_idx][reportid_idx]);
 			}
 			free(coll_bit_range[collection_node_idx]);
+			free(main_item_list_lookup[collection_node_idx]);
 		}
 		free(coll_bit_range);
+		free(main_item_list_lookup);
 	}
+
 
 	// Copy report temporary descriptor list into byte array
 	unsigned int byte_list_len = 0;
