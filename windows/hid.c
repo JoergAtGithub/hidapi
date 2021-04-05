@@ -1040,8 +1040,8 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				struct rd_main_item_node* coll_begin = coll_begin_lookup[button_caps[rt_idx][caps_idx].LinkCollection];
 				int first_bit, last_bit;
 				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-				
-				for (int child_idx = 0; child_idx < coll_number_of_direct_childs[button_caps[rt_idx][caps_idx].LinkCollection];child_idx++) {
+
+				for (int child_idx = 0; child_idx < coll_number_of_direct_childs[button_caps[rt_idx][caps_idx].LinkCollection]; child_idx++) {
 					// Determine in which section before/between/after child collection the item should be inserted
 					if (first_bit < coll_bit_range[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit)
 					{
@@ -1050,20 +1050,28 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					}
 					coll_begin = coll_end_lookup[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]];
 				}
-				
+
 				rd_insert_main_item_node(first_bit, first_bit, last_bit, TRUE, caps_idx, button_caps[rt_idx][caps_idx].LinkCollection, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &coll_begin);
 			}
-		}
-					//	// Add all value caps to node list
-					//	for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
-					//		if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
-					//			int first_bit, last_bit;
-					//			rd_determine_value_bitpositions(rt_idx, &value_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-					//			rd_append_main_item_node(first_bit, last_bit, FALSE, caps_idx, collection_node_idx, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &main_item_list);
-					//		}
-					//	}
-					//}
-		
+			// Add all value caps to node list
+			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
+				struct rd_main_item_node* coll_begin = coll_begin_lookup[value_caps[rt_idx][caps_idx].LinkCollection];
+				int first_bit, last_bit;
+				rd_determine_button_bitpositions(rt_idx, &value_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+
+				for (int child_idx = 0; child_idx < coll_number_of_direct_childs[value_caps[rt_idx][caps_idx].LinkCollection]; child_idx++) {
+					// Determine in which section before/between/after child collection the item should be inserted
+					if (first_bit < coll_bit_range[coll_child_order[value_caps[rt_idx][caps_idx].LinkCollection][child_idx]][value_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit)
+					{
+						// Note, that the default value for undefined coll_bit_range is -1, which cant be greater than the bit position
+						break;
+					}
+					coll_begin = coll_end_lookup[coll_child_order[value_caps[rt_idx][caps_idx].LinkCollection][child_idx]];
+				}
+
+				rd_insert_main_item_node(first_bit, first_bit, last_bit, FALSE, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &coll_begin);
+			}
+		}		
 
 
 		// ***********************************
@@ -1513,7 +1521,7 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 
 				reconstruct_report_descriptor(pp_data, &report_descriptor, &report_descriptor_len);
 				char filename[64];
-				sprintf(&filename[0], "hid_report_descriptor_%X_%X.txt", vendor_id, product_id);
+				sprintf(&filename[0], "hid_report_descriptor_%X_%X_dev%d.txt", vendor_id, product_id, device_index);
 				FILE* file_handle = fopen(filename, "wb");
 				if (file_handle) {
 					for (unsigned int byte_idx = 0; byte_idx < report_descriptor_len; byte_idx++) {
