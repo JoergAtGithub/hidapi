@@ -678,12 +678,40 @@ struct rd_main_item_node
 	struct rd_main_item_node* next; 
 };
 
-
+	
 static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
 	struct rd_main_item_node* new_list_node;
 
-	/* Determine last node in the list */
+	// Determine last node in the list
 	while (*list != NULL)
+	{
+		list = &(*list)->next;
+	}
+
+	new_list_node = malloc(sizeof(*new_list_node)); // Create new list entry
+	new_list_node->FirstBit = first_bit;
+	new_list_node->LastBit = last_bit;
+	new_list_node->IsButton = is_button;
+	new_list_node->CapsIndex = caps_index;
+	new_list_node->CollectionIndex = collection_index;
+	new_list_node->MainItemType = main_item_type;
+	new_list_node->ReportID = report_id;
+	new_list_node->next = NULL; // NULL marks last node in the list
+
+	*list = new_list_node;
+	return new_list_node;
+}
+
+static struct rd_main_item_node* rd_insert_main_item_node(int search_bit, int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
+	struct rd_main_item_node* new_list_node;
+	// Determine last node in the list
+	
+	while (((*list)->next->MainItemType != rd_collection) &&
+		   ((*list)->next->MainItemType != rd_collection_end) &&
+		   !(((*list)->next->FirstBit > search_bit) &&
+		   ((*list)->next->ReportID == report_id) &&
+		   ((*list)->next->MainItemType == main_item_type))
+		)
 	{
 		list = &(*list)->next;
 	}
@@ -696,9 +724,9 @@ static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int las
 	new_list_node->CollectionIndex = collection_index;
 	new_list_node->MainItemType = main_item_type;
 	new_list_node->ReportID = report_id;
-	new_list_node->next = NULL; // NULL marks last node in the list
+	new_list_node->next = (*list)->next;
 
-	*list = new_list_node;
+	(*list)->next = new_list_node;
 	return new_list_node;
 }
 
@@ -955,8 +983,10 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		main_item_list = (struct rd_main_item_node*)malloc(sizeof(main_item_list));
 		main_item_list = NULL; // List root
 		// Lookup table to find the Collection items in the list by index
-		struct rd_main_item_node** main_item_list_lookup;
-		main_item_list_lookup = malloc(link_collection_nodes_len * sizeof(*main_item_list_lookup));
+		struct rd_main_item_node** coll_begin_lookup;
+		struct rd_main_item_node** coll_end_lookup;
+		coll_begin_lookup = malloc(link_collection_nodes_len * sizeof(*coll_begin_lookup));
+		coll_end_lookup = malloc(link_collection_nodes_len * sizeof(*coll_end_lookup));
 		{
 			int* coll_last_written_child;
 			coll_last_written_child = malloc(link_collection_nodes_len * sizeof(coll_last_written_child[0]));
@@ -966,13 +996,13 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 
 			int actual_coll_level = 0;
 			USHORT collection_node_idx = 0;
-			main_item_list_lookup[0] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+			coll_begin_lookup[0] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 			while (actual_coll_level >= 0) {
 				if ((coll_number_of_direct_childs[collection_node_idx] != 0) &&
 					(coll_last_written_child[collection_node_idx] == -1)) {
 					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][0];
 					collection_node_idx = coll_child_order[collection_node_idx][0];
-					main_item_list_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 					actual_coll_level++;
 					
 
@@ -985,12 +1015,12 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					}
 					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][nextChild];
 					collection_node_idx = coll_child_order[collection_node_idx][nextChild];
-					main_item_list_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 					actual_coll_level++;
 				}
 				else {
 					actual_coll_level--;
-					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
+					coll_end_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
 					collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
 				}
 			}
@@ -1004,17 +1034,26 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		// ******************************************************
 
 
-		// This collection has no child collections
-
-					//for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
-					//	// Add all button caps to node list
-					//	for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-					//		if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
-					//			int first_bit, last_bit;
-					//			rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
-					//			rd_append_main_item_node(first_bit, last_bit, TRUE, caps_idx, collection_node_idx, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &main_item_list);
-					//		}
-					//	}
+		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			// Add all button caps to node list
+			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
+				struct rd_main_item_node* coll_begin = coll_begin_lookup[button_caps[rt_idx][caps_idx].LinkCollection];
+				int first_bit, last_bit;
+				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+				
+				for (int child_idx = 0; child_idx < coll_number_of_direct_childs[button_caps[rt_idx][caps_idx].LinkCollection];child_idx++) {
+					// Determine in which section before/between/after child collection the item should be inserted
+					if (first_bit < coll_bit_range[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit)
+					{
+						// Note, that the default value for undefined coll_bit_range is -1, which cant be greater than the bit position
+						break;
+					}
+					coll_begin = coll_end_lookup[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]];
+				}
+				
+				rd_insert_main_item_node(first_bit, first_bit, last_bit, TRUE, caps_idx, button_caps[rt_idx][caps_idx].LinkCollection, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &coll_begin);
+			}
+		}
 					//	// Add all value caps to node list
 					//	for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
 					//		if (button_caps[rt_idx][caps_idx].LinkCollection == collection_node_idx) {
@@ -1236,10 +1275,12 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				free(coll_bit_range[collection_node_idx][reportid_idx]);
 			}
 			free(coll_bit_range[collection_node_idx]);
-			free(main_item_list_lookup[collection_node_idx]);
+			free(coll_begin_lookup[collection_node_idx]);
+			free(coll_end_lookup[collection_node_idx]);
 		}
 		free(coll_bit_range);
-		free(main_item_list_lookup);
+		free(coll_begin_lookup);
+		free(coll_end_lookup);
 	}
 
 
