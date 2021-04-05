@@ -968,22 +968,27 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					}
 					actual_coll_level--;
 					if (actual_coll_level >= 0) {
+						rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
 						collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
 					}
 
 				}
 				else if (coll_parsed_flag[link_collection_nodes[collection_node_idx].FirstChild] == FALSE) {
 				coll_parsed_flag[link_collection_nodes[collection_node_idx].FirstChild] = TRUE;
-
 					actual_coll_level++;
 					collection_node_idx = link_collection_nodes[collection_node_idx].FirstChild;
+					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
 				}
 				else if (link_collection_nodes[collection_node_idx].NextSibling != 0) {
-					collection_node_idx = link_collection_nodes[collection_node_idx].NextSibling;
+					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
+					collection_node_idx = link_collection_nodes[collection_node_idx].NextSibling;	
+					rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+
 				}
 				else {
 					actual_coll_level--;
 					if (actual_coll_level >= 0) {
+						rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
 						collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
 					}
 				}
@@ -1026,36 +1031,41 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		int report_count = 0;
 
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
-			if (last_usage_page != link_collection_nodes[collection_node_idx].LinkUsagePage) {
-				rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage, &byte_list);
-				printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
-				last_usage_page = link_collection_nodes[collection_node_idx].LinkUsagePage;
-			}
-			rd_write_short_item(rd_local_usage, link_collection_nodes[collection_node_idx].LinkUsage, &byte_list);
-			printf("Usage  (%d)\n", link_collection_nodes[collection_node_idx].LinkUsage);
-			if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
-				rd_write_short_item(rd_main_collection, 0x00, &byte_list);
-				printf("Collection (Physical)\n");
-			}
-			else if (link_collection_nodes[collection_node_idx].CollectionType == 1) {
-				rd_write_short_item(rd_main_collection, 0x01, &byte_list);
-				printf("Collection (Application)\n");
-			}
-			else if (link_collection_nodes[collection_node_idx].CollectionType == 2) {
-				rd_write_short_item(rd_main_collection, 0x02, &byte_list);
-				printf("Collection (Logical)\n");
-			}
-			else {
-				printf("Collection (nnn)\n");
-			}
 			while (main_item_list != NULL)
 			{
 				int rt_idx = main_item_list->MainItemType;
 				int	caps_idx = main_item_list->CapsIndex;
 				UCHAR report_id = main_item_list->ReportID;
-
-					if (main_item_list->IsButton) {
-						if (caps_idx != -1) {
+				if (main_item_list->MainItemType == rd_collection) {
+					if (last_usage_page != link_collection_nodes[collection_node_idx].LinkUsagePage) {
+						rd_write_short_item(rd_global_usage_page, link_collection_nodes[collection_node_idx].LinkUsagePage, &byte_list);
+						printf("Usage Page (%d)\n", link_collection_nodes[collection_node_idx].LinkUsagePage);
+						last_usage_page = link_collection_nodes[collection_node_idx].LinkUsagePage;
+					}
+					rd_write_short_item(rd_local_usage, link_collection_nodes[collection_node_idx].LinkUsage, &byte_list);
+					printf("Usage  (%d)\n", link_collection_nodes[collection_node_idx].LinkUsage);
+					if (link_collection_nodes[collection_node_idx].CollectionType == 0) {
+						rd_write_short_item(rd_main_collection, 0x00, &byte_list);
+						printf("Collection (Physical)\n");
+					}
+					else if (link_collection_nodes[collection_node_idx].CollectionType == 1) {
+						rd_write_short_item(rd_main_collection, 0x01, &byte_list);
+						printf("Collection (Application)\n");
+					}
+					else if (link_collection_nodes[collection_node_idx].CollectionType == 2) {
+						rd_write_short_item(rd_main_collection, 0x02, &byte_list);
+						printf("Collection (Logical)\n");
+					}
+					else {
+						printf("Collection (nnn)\n");
+					}
+				}
+				else if(main_item_list->MainItemType == rd_collection_end) {
+					rd_write_short_item(rd_main_collection_end, 0, &byte_list);
+					printf("End Collection\n");
+				}
+				else if (main_item_list->IsButton) {
+					if (caps_idx != -1) {
 							if (last_report_id != button_caps[rt_idx][caps_idx].ReportID) {
 								// Write Report ID if changed
 								rd_write_short_item(rd_global_report_id, button_caps[rt_idx][caps_idx].ReportID, &byte_list);
@@ -1077,6 +1087,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 							}
 
 							if ((main_item_list->next != NULL) &&
+								(main_item_list->next->MainItemType == rt_idx) &&
 								(main_item_list->next->IsButton == TRUE) &&
 								(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == button_caps[rt_idx][caps_idx].UsagePage) &&
 								(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == button_caps[rt_idx][caps_idx].ReportID) &&
@@ -1142,6 +1153,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 							}
 							
 							if ((main_item_list->next != NULL) &&
+								(main_item_list->next->MainItemType == rt_idx) &&
 								(main_item_list->next->IsButton == FALSE) &&
 								(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == value_caps[rt_idx][caps_idx].UsagePage) &&
 								(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].LogicalMin == value_caps[rt_idx][caps_idx].LogicalMin) &&
@@ -1209,10 +1221,6 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 						}
 					}
 
-				if (main_item_list->next == NULL) {
-					rd_write_short_item(rd_main_collection_end, 0, &byte_list);
-					printf("End Collection\n");			
-				}
 				main_item_list = main_item_list->next;
 			}
 		}
