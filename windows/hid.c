@@ -97,7 +97,7 @@ static struct hid_api_version api_version = {
 		USHORT VersionNumber;
 	} HIDD_ATTRIBUTES, *PHIDD_ATTRIBUTES;
 
-	typedef USHORT USAGE;
+	typedef USHORT USAGE, *PUSAGE;
 	typedef struct _HIDP_CAPS {
 		USAGE Usage;
 		USAGE UsagePage;
@@ -225,19 +225,9 @@ static struct hid_api_version api_version = {
 		HidP_Feature,
 		NUM_OF_HIDP_REPORT_TYPES
 	} HIDP_REPORT_TYPE;
-	typedef struct _HIDP_UNKNOWN_TOKEN {
-		UCHAR Token;
-		UCHAR Reserved[3];
-		ULONG BitField;
-	} HIDP_UNKNOWN_TOKEN, * PHIDP_UNKNOWN_TOKEN;
-	typedef struct _HIDP_EXTENDED_ATTRIBUTES {
-		UCHAR               NumGlobalUnknowns;
-		UCHAR               Reserved[3];
-		PHIDP_UNKNOWN_TOKEN GlobalUnknowns;
-		ULONG               Data[1];
-	} HIDP_EXTENDED_ATTRIBUTES, * PHIDP_EXTENDED_ATTRIBUTES;
 
-	#define HIDP_STATUS_SUCCESS 0x110000
+#define HIDP_STATUS_SUCCESS 0x110000
+#define HIDP_STATUS_BUFFER_TOO_SMALL 0x110007
 
 	typedef BOOLEAN (__stdcall *HidD_GetAttributes_)(HANDLE device, PHIDD_ATTRIBUTES attrib);
 	typedef BOOLEAN (__stdcall *HidD_GetSerialNumberString_)(HANDLE device, PVOID buffer, ULONG buffer_len);
@@ -256,7 +246,8 @@ static struct hid_api_version api_version = {
 	typedef NTSTATUS(__stdcall *HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
 	typedef NTSTATUS(__stdcall *HidP_SetData_)(HIDP_REPORT_TYPE report_type, PHIDP_DATA data_list, PULONG data_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
 	typedef NTSTATUS(__stdcall* HidP_SetUsageValueArray_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, USAGE usage, PCHAR usage_value,	USHORT usage_value_byte_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_GetExtendedAttributes_)(HIDP_REPORT_TYPE report_type, USHORT data_index, PHIDP_PREPARSED_DATA preparsed_data, PHIDP_EXTENDED_ATTRIBUTES attributes, PULONG length_attributes);
+	typedef NTSTATUS(__stdcall* HidP_SetUsages_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, PUSAGE usage_list, PULONG usage_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+		
 
 	static HidD_GetAttributes_ HidD_GetAttributes;
 	static HidD_GetSerialNumberString_ HidD_GetSerialNumberString;
@@ -275,7 +266,7 @@ static struct hid_api_version api_version = {
 	static HidP_GetValueCaps_ HidP_GetValueCaps;
 	static HidP_SetData_ HidP_SetData;
 	static HidP_SetUsageValueArray_ HidP_SetUsageValueArray;
-	static HidP_GetExtendedAttributes_ HidP_GetExtendedAttributes;
+	static HidP_SetUsages_ HidP_SetUsages;
 
 	static HMODULE lib_handle = NULL;
 	static BOOLEAN initialized = FALSE;
@@ -388,7 +379,7 @@ static int lookup_functions()
 		RESOLVE(HidP_GetValueCaps);
 		RESOLVE(HidP_SetData);
 		RESOLVE(HidP_SetUsageValueArray);
-		RESOLVE(HidP_GetExtendedAttributes);
+		RESOLVE(HidP_SetUsages);
 
 #undef RESOLVE
 #if defined(__GNUC__)
@@ -557,7 +548,7 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_cap, int* first_bit, int* last_bit, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
 	char* dummy_report;
 
-	dummy_report = ( char*)malloc(max_report_length * sizeof(char));
+	dummy_report = ( char*)malloc((max_report_length) * sizeof(char));
 	for (unsigned int i = 1; i < max_report_length; i++) {
 		dummy_report[i] = 0x00;
 	}
@@ -607,13 +598,53 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 		 
 		// No working solution known, to determine the bit positions of a button array
 		
-		//PHIDP_EXTENDED_ATTRIBUTES ext_attr;
-		//ULONG ext_attr_len = 100;
-		//ext_attr = (HIDP_EXTENDED_ATTRIBUTES*)malloc(ext_attr_len);
-		//NTSTATUS status;
-		//status = HidP_GetExtendedAttributes(report_type, button_cap->Range.DataIndexMin, pp_data, ext_attr, &ext_attr_len);
 
+		ULONG   usage_len = 1;
+		USAGE   usage_list[] = { button_cap->Range.UsageMax,button_cap->Range.UsageMin };
+		NTSTATUS status;
 
+		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list, &usage_len, pp_data, dummy_report, max_report_length);
+		//HIDP_STATUS_BUFFER_TOO_SMALL
+		if (status == HIDP_STATUS_SUCCESS) {
+		for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
+		{
+			if (dummy_report[byteIdx] != 0) {
+				for (int bitIdx = 0; bitIdx < 8; bitIdx++)
+				{
+					if (dummy_report[byteIdx] & (0x01 << bitIdx))
+					{
+						*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
+						*(last_bit) = *(first_bit)+bit_size - 1;
+						break;
+					}
+				}
+				//break;
+			}
+		}
+	}
+		for (unsigned int i = 1; i < max_report_length; i++) {
+			dummy_report[i] = 0x00;
+		}
+		USAGE usage_list2[] = { button_cap->Range.UsageMin,button_cap->Range.UsageMax };
+		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list2, &usage_len, pp_data, dummy_report, max_report_length);
+
+		if (status == HIDP_STATUS_SUCCESS) {
+			for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
+			{
+				if (dummy_report[byteIdx] != 0) {
+					for (int bitIdx = 0; bitIdx < 8; bitIdx++)
+					{
+						if (dummy_report[byteIdx] & (0x01 << bitIdx))
+						{
+							*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
+							*(last_bit) = *(first_bit)+bit_size - 1;
+							break;
+						}
+					}
+					//break;
+				}
+			}
+		}
 		//int maxDummyvalue = (button_cap->Range.DataIndexMax - button_cap->Range.DataIndexMax);
 		//int number_of_dummy_usage_bits = 8;
 
