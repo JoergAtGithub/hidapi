@@ -654,10 +654,11 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 				dummy_report[i] = 0x00;
 			}
 			ULONG usage_len = report_count_idx + 1;
+			//USAGE usage_list[] = { 1,2,3,4,5,6,7,8,9,10 };
 			PUSAGE usage_list;
 			usage_list = (PUSAGE)malloc(usage_len * sizeof(USAGE));
 			for (unsigned int i = 0; i < usage_len; i++) {
-				usage_list[i] = button_cap->Range.UsageMax - i; // Will only set bits, if usage not 0. UsageMin might be 0, therfore go down from UsageMax
+				usage_list[i] = button_cap->Range.UsageMax - i;
 			}
 			status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, usage_list, &usage_len, pp_data, dummy_report, max_report_length);
 			free(usage_list);
