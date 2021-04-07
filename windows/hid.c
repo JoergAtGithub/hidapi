@@ -544,61 +544,83 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 
 }
 
+static int rd_find_first_one_bit(char* dummy_report, unsigned int max_report_length) {
+	int first_bit = -1;
+	for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
+	{
+		if (dummy_report[byteIdx] != 0) {
+			for (int bitIdx = 0; bitIdx < 8; bitIdx++)
+			{
+				if (dummy_report[byteIdx] & (0x01 << bitIdx))
+				{
+					first_bit = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
+					break;
+				}
+			}
+			break;
+		}
+	}
+	return first_bit;
+}
+
+static int rd_find_last_one_bit(char* dummy_report, unsigned int max_report_length) {
+	int last_bit = -1;
+	for (unsigned int byteIdx = max_report_length; byteIdx >= 1; byteIdx--)
+	{
+		if (dummy_report[byteIdx] != 0) {
+			for (int bitIdx = 7; bitIdx >= 0; bitIdx--)
+			{
+				if (dummy_report[byteIdx] & (0x01 << bitIdx))
+				{
+					last_bit = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
+					break;
+				}
+			}
+			break;
+		}
+	}
+	return last_bit;
+}
 
 static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_cap, int* first_bit, int* last_bit, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
 	char* dummy_report;
 
 	dummy_report = ( char*)malloc((max_report_length) * sizeof(char));
+	dummy_report[0] = button_cap->ReportID;
 	for (unsigned int i = 1; i < max_report_length; i++) {
 		dummy_report[i] = 0x00;
 	}
-	dummy_report[0] = button_cap->ReportID;
 
-	HIDP_DATA dummy_hidp_data;
-
-	unsigned int bit_size;
-	if (button_cap->IsRange) {
-		dummy_hidp_data.DataIndex = button_cap->Range.DataIndexMin;
-		bit_size = button_cap->Range.DataIndexMax - button_cap->Range.DataIndexMin + 1; // Number of buttons
-	}
-	else {
-		dummy_hidp_data.DataIndex = button_cap->NotRange.DataIndex;
-		bit_size = 1; // Single button
-	}
-	dummy_hidp_data.RawValue = 0xffffffffu;
-	ULONG dummy_datalength = 1;
 	*(first_bit) = -1;
 	*(last_bit) = -1;
 
 
 	// USB HID spec 1.11 chapter 6.2.2.4 Main Items, defines bit 1 as: {Array (0) | Variable (1)}  
 	if ((button_cap->BitField & 0x02) == 0x02) {
-		// Variable
+		// Variable (1)
+
+		HIDP_DATA dummy_hidp_data;
+
+		unsigned int bit_size;
+		if (button_cap->IsRange) {
+			dummy_hidp_data.DataIndex = button_cap->Range.DataIndexMin;
+			bit_size = button_cap->Range.DataIndexMax - button_cap->Range.DataIndexMin + 1; // Number of buttons
+		}
+		else {
+			dummy_hidp_data.DataIndex = button_cap->NotRange.DataIndex;
+			bit_size = 1; // Single button
+		}
+		dummy_hidp_data.RawValue = 0xffffffffu;
+		ULONG dummy_datalength = 1;
 
 		if (HidP_SetData(report_type, &dummy_hidp_data, &dummy_datalength, pp_data, dummy_report, max_report_length) == HIDP_STATUS_SUCCESS) {
-			for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
-			{
-				if (dummy_report[byteIdx] != 0) {
-					for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-					{
-						if (dummy_report[byteIdx] & (0x01 << bitIdx))
-						{
-							*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
-							*(last_bit) = *(first_bit)+bit_size - 1;
-							break;
-						}
-					}
-					break;
-				}
-			}
+			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
+			*(last_bit) = *(first_bit)+bit_size - 1; // Button variable fields have only one bit
 		}
 	}
 	else {
-		// Array
+		// Array (0)
 		 
-		// No working solution known, to determine the bit positions of a button array
-		
-
 		ULONG   usage_len = 1;
 		USAGE   usage_list[] = { button_cap->Range.UsageMax,button_cap->Range.UsageMin };
 		NTSTATUS status;
@@ -614,11 +636,11 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 					if (dummy_report[byteIdx] & (0x01 << bitIdx))
 					{
 						*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
-						*(last_bit) = *(first_bit)+bit_size - 1;
+						*(last_bit) = *(first_bit);
 						break;
 					}
 				}
-				//break;
+				break;
 			}
 		}
 	}
@@ -637,7 +659,7 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 						if (dummy_report[byteIdx] & (0x01 << bitIdx))
 						{
 							*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
-							*(last_bit) = *(first_bit)+bit_size - 1;
+							*(last_bit) = *(first_bit);
 							break;
 						}
 					}
@@ -645,31 +667,7 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 				}
 			}
 		}
-		//int maxDummyvalue = (button_cap->Range.DataIndexMax - button_cap->Range.DataIndexMax);
-		//int number_of_dummy_usage_bits = 8;
-
-		//PUCHAR usage_value = malloc(number_of_dummy_usage_bits / 8 * sizeof(unsigned char));
-
-		//for (int i = 0; i < number_of_dummy_usage_bits / 8; i++) { usage_value[i] = 0xFF; }
-
-		//if (HidP_SetUsageValueArray(report_type, button_cap->UsagePage, button_cap->LinkCollection, button_cap->Range.UsageMin, button_cap->Range.UsageMax, 1, pp_data, dummy_report, max_report_length) == HIDP_STATUS_SUCCESS) {
-		//	for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
-		//	{
-		//		if (dummy_report[byteIdx] != 0) {
-		//			for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-		//			{
-		//				if (dummy_report[byteIdx] & (0x01 << bitIdx))
-		//				{
-		//					*(first_bit) = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
-		//					//*(last_bit) = *(first_bit)+(button_cap->ReportCount * value_cap->BitSize) - 1;
-		//					break;
-		//				}
-		//			}
-		//			break;
-		//		}
-		//	}
-		//}
-		//free(usage_value);
+		
 	}
 
 	free(dummy_report);
@@ -679,10 +677,11 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 	unsigned char* dummy_report;
 
 	dummy_report = (unsigned char*)malloc(max_report_length * sizeof(unsigned char));
+
+	dummy_report[0] = value_cap->ReportID;
 	for (unsigned int i = 1; i < max_report_length; i++) {
 		dummy_report[i] = 0x00;
 	}
-	dummy_report[0] = value_cap->ReportID;
 		
 	*(first_bit) = -1;
 	*(last_bit) = -1;
@@ -691,7 +690,7 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 
 	// USB HID spec 1.11 chapter 6.2.2.4 Main Items, defines bit 1 as: {Array (0) | Variable (1)}  
 	if ((value_cap->BitField & 0x02) == 0x02) {
-		// Variable
+		// Variable (1)
 
 		HIDP_DATA dummy_hidp_data;
 		
@@ -700,25 +699,12 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 		ULONG dummy_datalength = 1;
 
 		if (HidP_SetData(report_type, &dummy_hidp_data, &dummy_datalength, pp_data, dummy_report, max_report_length) == HIDP_STATUS_SUCCESS) {
-			for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
-			{
-				if (dummy_report[byteIdx] != 0) {
-					for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-					{
-						if (dummy_report[byteIdx] & (0x01 << bitIdx))
-						{
-							*(first_bit) = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
-							*(last_bit) = *(first_bit)+(value_cap->ReportCount * value_cap->BitSize) - 1;
-							break;
-						}
-					}
-					break;
-				}
-			}
+			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
+			*(last_bit) = *(first_bit)+(value_cap->ReportCount * value_cap->BitSize) - 1;
 		}
 	}
 	else {
-		// Array
+		// Array (0)
 		int number_of_dummy_usage_bits = (value_cap->ReportCount * value_cap->BitSize + 7);
 
 		PUCHAR usage_value = malloc(number_of_dummy_usage_bits / 8 * sizeof(unsigned char));
@@ -726,21 +712,8 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 		for (int i = 0; i < number_of_dummy_usage_bits / 8; i++) { usage_value[i] = 0xFF; }
 
 		if (HidP_SetUsageValueArray(report_type, value_cap->UsagePage, value_cap->LinkCollection, value_cap->NotRange.Usage, usage_value, number_of_dummy_usage_bits / 8, pp_data, dummy_report, max_report_length) == HIDP_STATUS_SUCCESS) {
-			for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
-			{
-				if (dummy_report[byteIdx] != 0) {
-					for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-					{
-						if (dummy_report[byteIdx] & (0x01 << bitIdx))
-						{
-							*(first_bit) = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
-							*(last_bit) = *(first_bit)+(value_cap->ReportCount * value_cap->BitSize) - 1;
-							break;
-						}
-					}
-					break;
-				}
-			}
+			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
+			*(last_bit) = *(first_bit)+(value_cap->ReportCount * value_cap->BitSize) - 1;
 		}
 		free(usage_value);
 	}
@@ -1317,7 +1290,7 @@ free(coll_last_written_child);
 						if ((main_item_list->next != NULL) &&
 							(main_item_list->next->MainItemType == rt_idx) &&
 							(main_item_list->next->IsButton == TRUE) &&
-							(main_item_list->next->CapsIndex == -1) && //Padding
+							(main_item_list->next->CapsIndex != -1) && //Padding
 							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == button_caps[rt_idx][caps_idx].UsagePage) &&
 							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == button_caps[rt_idx][caps_idx].ReportID) &&
 							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitField == button_caps[rt_idx][caps_idx].BitField)
