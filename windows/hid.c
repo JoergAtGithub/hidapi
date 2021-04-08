@@ -397,7 +397,10 @@ static int lookup_functions()
 }
 #endif
 
-
+/// <summary>
+/// Enumeration of all report descriptor item One-Byte prefixes from the USB HID spec 1.11
+/// The two least significiant bits nn represent the size of the item and must be added to this values
+/// </summary>
 typedef enum rd_items_ {
 	rd_main_input =			      0x80, ///< 1000 00 nn
 	rd_main_output =			  0x90, ///< 1001 00 nn
@@ -428,13 +431,20 @@ typedef enum rd_items_ {
 	rd_local_delimiter =          0xA8  ///< 1010 10 nn
 } RD_ITEMS;
 
+/// <summary>
+/// List element of the encoded report descriptor
+/// </summary>
 struct rd_item_byte
 {
 	unsigned char byte;
 	struct rd_item_byte* next;
 };
 
-
+/// <summary>
+/// Function that appends a byte to encoded report descriptor list
+/// </summary>
+/// <param name="byte">Single byte to append</param>
+/// <param name="list">Pointer to the list</param>
 static void rd_append_byte(unsigned char byte, struct rd_item_byte** list) {
 		struct rd_item_byte* new_list_element;
 
@@ -545,9 +555,16 @@ static int rd_write_short_item(enum RD_ITEMS rd_item, LONG64 data, struct rd_ite
 /// <param name="bDataSize">Size of long item data (range 0-255 in Bytes)</param>
 /// <returns></returns>
 static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, unsigned char bDataSize) {
-
+	// Not implemented
 }
 
+/// <summary>
+/// Function that determines the first bit in 1 state in a report
+/// (The first byte containing the Report-ID byte is ignored and not counted)
+/// </summary>
+/// <param name="dummy_report">Report array</param>
+/// <param name="max_report_length">Length of the report in bytes</param>
+/// <returns>Position of the determined bit (first bit postion is 0)</returns>
 static int rd_find_first_one_bit(char* dummy_report, unsigned int max_report_length) {
 	int first_bit = -1;
 	for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
@@ -567,45 +584,20 @@ static int rd_find_first_one_bit(char* dummy_report, unsigned int max_report_len
 	return first_bit;
 }
 
-static int rd_find_last_one_bit(char* dummy_report, unsigned int max_report_length) {
-	int last_bit = -1;
-	for (unsigned int byteIdx = max_report_length-1; byteIdx >= 1; byteIdx--)
-	{
-		if (dummy_report[byteIdx] != 0) {
-			for (int bitIdx = 7; bitIdx >= 0; bitIdx--)
-			{
-				if (dummy_report[byteIdx] & (0x01 << bitIdx))
-				{
-					last_bit = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
-					break;
-				}
-			}
-			break;
-		}
-	}
-	return last_bit;
-}
-
-static int rd_find_last_zero_bit(char* dummy_report, unsigned int max_report_length) {
-	int last_bit = -1;
-	for (unsigned int byteIdx = max_report_length-1; byteIdx >= 1; byteIdx--)
-	{
-		if (dummy_report[byteIdx] != (char) 0xFF) {
-			for (int bitIdx = 7; bitIdx >= 0; bitIdx--)
-			{
-				if ((dummy_report[byteIdx] | (char) (0xFF7F >> bitIdx)) == (char) (0xFF7F >> bitIdx))
-				{
-					last_bit = 8 * (byteIdx - 1) + bitIdx; // First byte with the Report ID not counted
-					break;
-				}
-			}
-			break;
-		}
-	}
-	return last_bit;
-}
-
-static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_cap, int* first_bit, int* last_bit, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
+/// <summary>
+/// Function that determines the bit position of a button cap in a report
+/// This is done by setting values in empty reports using HidP_SetData vor variable bit fields
+/// and HidP_SetUsages for button arrays
+/// </summary>
+/// <param name="report_type">Input, Output or Feature</param>
+/// <param name="button_cap">Data structure that represents the button cap</param>
+/// <param name="first_bit">Returns the position of the first bit of this button cap in the report</param>
+/// <param name="last_bit">Returns the position of the last bit of this button cap in the report</param>
+/// <param name="button_array_count">If the button cap represents an array, this returns the number of array elements (Report Count) otherwise -1</param>
+/// <param name="button_array_size">If the button cap represents an array, this returns the size in bits of an array element (Report Size) otherwise -1</param>
+/// <param name="max_report_length">Maximum size of any report of this type (input, Output, or Feature)</param>
+/// <param name="pp_data">Preparsed Data structure containing the report descriptor information of the HID device</param>
+static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_cap, int* first_bit, int* last_bit, int* button_array_count, int * button_array_size, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
 	char* dummy_report;
 
 	dummy_report = (char*)malloc((max_report_length) * sizeof(char));
@@ -614,13 +606,16 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 		dummy_report[i] = 0x00;
 	}
 
+	NTSTATUS status;
+
 	*(first_bit) = -1;
 	*(last_bit) = -1;
-
+	*(button_array_count) = -1;
+	*(button_array_size) = -1;
 
 	// USB HID spec 1.11 chapter 6.2.2.4 Main Items, defines bit 1 as: {Array (0) | Variable (1)}  
 	if ((button_cap->BitField & 0x02) == 0x02) {
-		// Variable (1)
+		// Variable (1) - also refered as Bit Field (one bit in the report for each button)
 
 		HIDP_DATA dummy_hidp_data;
 
@@ -636,15 +631,14 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 		dummy_hidp_data.RawValue = 0xffffffffu;
 		ULONG dummy_datalength = 1;
 
-		if (HidP_SetData(report_type, &dummy_hidp_data, &dummy_datalength, pp_data, dummy_report, max_report_length) == HIDP_STATUS_SUCCESS) {
+		status = HidP_SetData(report_type, &dummy_hidp_data, &dummy_datalength, pp_data, dummy_report, max_report_length);
+		if (status == HIDP_STATUS_SUCCESS) {
 			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
 			*(last_bit) = *(first_bit)+bit_size - 1; // Button variable fields have only one bit
 		}
 	}
 	else {
 		// Array (0)
-		 
-		NTSTATUS status;
 
 		int report_count = -1;
 
@@ -667,74 +661,50 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 			}
 		}
 
+		*(button_array_count) = report_count;
 
-		for (unsigned int i = 1; i < max_report_length; i++) {
-			dummy_report[i] = 0x00;
-		}
-
+		// Find first bit position
 		ULONG   usage_len = 1;
 		USAGE   usage_list[] = { button_cap->Range.UsageMin };
+		for (USAGE usage_idx = button_cap->Range.UsageMin; usage_idx < button_cap->Range.UsageMax; usage_idx++) {
 
-		usage_len = 1;
-		usage_list[0] = button_cap->Range.UsageMax;
-		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list, &usage_len, pp_data, dummy_report, max_report_length);
-		if (status == HIDP_STATUS_SUCCESS) {
-			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
-		}
-
-		for (unsigned int i = 1; i < max_report_length; i++) {
-			dummy_report[i] = 0x00;
-		}
-
-		usage_len = 1;
-		usage_list[0] = button_cap->Range.UsageMin;
-		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list, &usage_len, pp_data, dummy_report, max_report_length);
-		if (status == HIDP_STATUS_SUCCESS) {
-			*(last_bit) = rd_find_last_one_bit(dummy_report, max_report_length);
-		}
-
-		for (unsigned int i = 1; i < max_report_length; i++) {
-			dummy_report[i] = 0xFF;
-		}
-
-		// Handle cae that last bit was zero (even value)ß
-		usage_len = 1;
-		usage_list[0] = button_cap->Range.UsageMin;
-		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list, &usage_len, pp_data, dummy_report, max_report_length);
-		if (status == HIDP_STATUS_SUCCESS) {
-			int last_zero_bit = rd_find_last_zero_bit(dummy_report, max_report_length);
-			if (last_zero_bit > *(last_bit)) {
-				*(last_bit) = last_zero_bit;
+			for (unsigned int i = 1; i < max_report_length; i++) {
+				dummy_report[i] = 0x00;
 			}
-		}
-	
-		for (unsigned int i = 1; i < max_report_length; i++) {
-			dummy_report[i] = 0x00;
-		}
-		USAGE usage_list2[] = { button_cap->Range.UsageMin,button_cap->Range.UsageMax };
-		status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list2, &usage_len, pp_data, dummy_report, max_report_length);
-
-		if (status == HIDP_STATUS_SUCCESS) {
-			for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
-			{
-				if (dummy_report[byteIdx] != 0) {
-					for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-					{
-						if (dummy_report[byteIdx] & (0x01 << bitIdx))
-						{
-							*(first_bit) = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
-							*(last_bit) = *(first_bit);
-							break;
-						}
-					}
-					//break;
+			usage_list[0] = usage_idx;
+			status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list[0], &usage_len, pp_data, dummy_report, max_report_length);
+			if (status == HIDP_STATUS_SUCCESS) {
+				int local_first_bit = rd_find_first_one_bit(dummy_report, max_report_length);
+				if ((local_first_bit != -1) &&
+					((*(first_bit) == -1)||
+					(local_first_bit < *(first_bit)))) {
+					*(first_bit) = local_first_bit;
 				}
 			}
 		}
+				
+		// Calculate how many bits are needed t represent Usage Max
+		int number_of_bits = 0; // Number of bits needed to represent the maximum usage value
+		USAGE temp = button_cap->Range.UsageMax;
+		while (temp >= 1) { temp = temp >> 1; ++number_of_bits; }
+		*(last_bit) = *(first_bit)+(report_count * number_of_bits)-1;
+		*(button_array_size) = number_of_bits;
 	}
 	free(dummy_report);
 }
 
+/// <summary>
+/// Function that determines the bit position of a value cap in a report
+/// This is done by setting values in empty reports using HidP_SetData vor variable fields
+/// and HidP_SetUsageValueArray for value arrays
+/// </summary>
+/// <param name="report_type">Input, Output or Feature</param>
+/// <param name="value_cap">Data structure that represents the value cap</param>
+/// <param name="first_bit">Returns the position of the first bit of this value cap in the report</param>
+/// <param name="last_bit">Returns the position of the last bit of this value cap in the report</param>
+/// <param name="max_report_length">Maximum size of any report of this type (input, Output, or Feature)</param>
+/// <param name="pp_data">Preparsed Data structure containing the report descriptor information of the HID device</param>
+/// <summary>
 static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_cap, int* first_bit, int* last_bit, unsigned int max_report_length, PHIDP_PREPARSED_DATA pp_data) {
 	unsigned char* dummy_report;
 
@@ -767,6 +737,9 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 	}
 	else {
 		// Array (0)
+
+		/// !!! This is untested funtionality, because I have no device with value array for test !!!
+
 		int number_of_dummy_usage_bits = (value_cap->ReportCount * value_cap->BitSize + 7);
 
 		PUCHAR usage_value = malloc(number_of_dummy_usage_bits / 8 * sizeof(unsigned char));
@@ -796,12 +769,23 @@ typedef struct _RD_BIT_RANGE {
 	int LastBit;
 } RD_BIT_RANGE;
 
+typedef enum _RD_ITEM_NODE_TYPE {
+	rd_item_node_value,
+	rd_item_node_button,
+	rd_item_node_padding,
+	rd_item_node_collection,
+	RD_NUM_OF_ITEM_NODE_TYPES
+} RD_NODE_TYPE;
 
 struct rd_main_item_node
 {
 	int FirstBit; ///< Position of first bit in report (counting from 0)
 	int LastBit; ///< Position of last bit in report (counting from 0)
-	BOOLEAN IsButton;
+	int ButtonArrayCount; ///< If the button cap represents an array, this is the number of array elements (Report Count) otherwise -1
+	int ButtonArraySize; ///< If the button cap represents an array, this is the size in bits of an array element (Report Size) otherwise -1
+	RD_NODE_TYPE TypeOfNode; ///< Information if caps index refers to the array of button caps, value caps,
+							 ///< or if the node is just a padding element to fill unused bit positions.
+	                         ///< The node can also be a collection node without any bits in the report.
 	int CapsIndex; ///< Index in the array of button_caps or value caps
 	int CollectionIndex; ///< Index in the array of link collections
 	RD_MAIN_ITEMS MainItemType; ///< Input, Output, Feature, Collection or Collection End
@@ -810,7 +794,7 @@ struct rd_main_item_node
 };
 
 	
-static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
+static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int last_bit, int button_array_count, int button_array_size, RD_NODE_TYPE type_of_node, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
 	struct rd_main_item_node* new_list_node;
 
 	// Determine last node in the list
@@ -822,7 +806,9 @@ static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int las
 	new_list_node = malloc(sizeof(*new_list_node)); // Create new list entry
 	new_list_node->FirstBit = first_bit;
 	new_list_node->LastBit = last_bit;
-	new_list_node->IsButton = is_button;
+	new_list_node->ButtonArrayCount = button_array_count;
+	new_list_node->ButtonArraySize = button_array_size;
+	new_list_node->TypeOfNode = type_of_node;
 	new_list_node->CapsIndex = caps_index;
 	new_list_node->CollectionIndex = collection_index;
 	new_list_node->MainItemType = main_item_type;
@@ -833,7 +819,7 @@ static struct rd_main_item_node* rd_append_main_item_node(int first_bit, int las
 	return new_list_node;
 }
 
-static struct rd_main_item_node* rd_insert_main_item_node(int search_bit, int first_bit, int last_bit, BOOLEAN is_button, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
+static struct rd_main_item_node* rd_insert_main_item_node(int search_bit, int first_bit, int last_bit, int button_array_count, int button_array_size, RD_NODE_TYPE type_of_node, int caps_index, int collection_index, RD_MAIN_ITEMS main_item_type, unsigned char report_id, struct rd_main_item_node** list) {
 	struct rd_main_item_node* new_list_node;
 	// Determine last node in the list
 	
@@ -850,7 +836,9 @@ static struct rd_main_item_node* rd_insert_main_item_node(int search_bit, int fi
 	new_list_node = malloc(sizeof(*new_list_node)); // Create new list entry
 	new_list_node->FirstBit = first_bit;
 	new_list_node->LastBit= last_bit;
-	new_list_node->IsButton = is_button;
+	new_list_node->ButtonArrayCount = button_array_count;
+	new_list_node->ButtonArraySize = button_array_size;
+	new_list_node->TypeOfNode = type_of_node;
 	new_list_node->CapsIndex = caps_index;
 	new_list_node->CollectionIndex = collection_index;
 	new_list_node->MainItemType = main_item_type;
@@ -949,8 +937,8 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		// Fill the lookup table where caps exist
 		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
-				int first_bit, last_bit;
-				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+				int first_bit, last_bit, button_array_count, button_array_size;
+				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, &button_array_count, &button_array_size, max_datalist_len[rt_idx], pp_data);
 				if (coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit == -1 ||
 					coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit > first_bit) {
 					coll_bit_range[button_caps[rt_idx][caps_idx].LinkCollection][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit = first_bit;
@@ -1107,6 +1095,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 			free(coll_parsed_flag);
 		}
 
+
 		// *****************************************************************************
 		// Create sorted list containing all the Collection and CollectionEnd main items
 		// *****************************************************************************
@@ -1125,37 +1114,37 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				coll_last_written_child[collection_node_idx] = -1;
 			}
 
-int actual_coll_level = 0;
-USHORT collection_node_idx = 0;
-coll_begin_lookup[0] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
-while (actual_coll_level >= 0) {
-	if ((coll_number_of_direct_childs[collection_node_idx] != 0) &&
-		(coll_last_written_child[collection_node_idx] == -1)) {
-		coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][0];
-		collection_node_idx = coll_child_order[collection_node_idx][0];
-		coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
-		actual_coll_level++;
+			int actual_coll_level = 0;
+			USHORT collection_node_idx = 0;
+			coll_begin_lookup[0] = rd_append_main_item_node(0, 0, -1, -1, rd_item_node_collection, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+			while (actual_coll_level >= 0) {
+				if ((coll_number_of_direct_childs[collection_node_idx] != 0) &&
+					(coll_last_written_child[collection_node_idx] == -1)) {
+					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][0];
+					collection_node_idx = coll_child_order[collection_node_idx][0];
+					coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, -1, -1, rd_item_node_collection, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					actual_coll_level++;
 
 
-	}
-	else if ((coll_number_of_direct_childs[collection_node_idx] > 1) &&
-		(coll_last_written_child[collection_node_idx] != coll_child_order[collection_node_idx][coll_number_of_direct_childs[collection_node_idx] - 1])) {
-		int nextChild = 1;
-		while (coll_last_written_child[collection_node_idx] != coll_child_order[collection_node_idx][nextChild - 1]) {
-			nextChild++;
-		}
-		coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][nextChild];
-		collection_node_idx = coll_child_order[collection_node_idx][nextChild];
-		coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection, 0, &main_item_list);
-		actual_coll_level++;
-	}
-	else {
-		actual_coll_level--;
-		coll_end_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, FALSE, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
-		collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
-	}
-}
-free(coll_last_written_child);
+				}
+				else if ((coll_number_of_direct_childs[collection_node_idx] > 1) &&
+					(coll_last_written_child[collection_node_idx] != coll_child_order[collection_node_idx][coll_number_of_direct_childs[collection_node_idx] - 1])) {
+					int nextChild = 1;
+					while (coll_last_written_child[collection_node_idx] != coll_child_order[collection_node_idx][nextChild - 1]) {
+						nextChild++;
+					}
+					coll_last_written_child[collection_node_idx] = coll_child_order[collection_node_idx][nextChild];
+					collection_node_idx = coll_child_order[collection_node_idx][nextChild];
+					coll_begin_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, -1, -1, rd_item_node_collection, 0, collection_node_idx, rd_collection, 0, &main_item_list);
+					actual_coll_level++;
+				}
+				else {
+					actual_coll_level--;
+					coll_end_lookup[collection_node_idx] = rd_append_main_item_node(0, 0, -1, -1, rd_item_node_collection, 0, collection_node_idx, rd_collection_end, 0, &main_item_list);
+					collection_node_idx = link_collection_nodes[collection_node_idx].Parent;
+				}
+			}
+			free(coll_last_written_child);
 		}
 
 
@@ -1163,26 +1152,24 @@ free(coll_last_written_child);
 		// Inserted Input/Output/Feature main items into the list
 		// in order of reconstructed bit positions
 		// ******************************************************
-
-
-		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			// Add all button caps to node list
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
 				struct rd_main_item_node* coll_begin = coll_begin_lookup[button_caps[rt_idx][caps_idx].LinkCollection];
-				int first_bit, last_bit;
-				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, max_datalist_len[rt_idx], pp_data);
+				int first_bit, last_bit, button_array_count, button_array_size;
+				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, &button_array_count, &button_array_size, max_datalist_len[rt_idx], pp_data);
 
 				for (int child_idx = 0; child_idx < coll_number_of_direct_childs[button_caps[rt_idx][caps_idx].LinkCollection]; child_idx++) {
 					// Determine in which section before/between/after child collection the item should be inserted
 					if (first_bit < coll_bit_range[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]][button_caps[rt_idx][caps_idx].ReportID][rt_idx]->FirstBit)
 					{
-						// Note, that the default value for undefined coll_bit_range is -1, which cant be greater than the bit position
+						// Note, that the default value for undefined coll_bit_range is -1, which can't be greater than the bit position
 						break;
 					}
 					coll_begin = coll_end_lookup[coll_child_order[button_caps[rt_idx][caps_idx].LinkCollection][child_idx]];
 				}
 
-				rd_insert_main_item_node(first_bit, first_bit, last_bit, TRUE, caps_idx, button_caps[rt_idx][caps_idx].LinkCollection, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &coll_begin);
+				rd_insert_main_item_node(first_bit, first_bit, last_bit, button_array_count, button_array_size, rd_item_node_button, caps_idx, button_caps[rt_idx][caps_idx].LinkCollection, rt_idx, button_caps[rt_idx][caps_idx].ReportID, &coll_begin);
 			}
 			// Add all value caps to node list
 			for (USHORT caps_idx = 0; caps_idx < value_caps_len[rt_idx]; caps_idx++) {
@@ -1199,7 +1186,7 @@ free(coll_last_written_child);
 					}
 					coll_begin = coll_end_lookup[coll_child_order[value_caps[rt_idx][caps_idx].LinkCollection][child_idx]];
 				}
-				rd_insert_main_item_node(first_bit, first_bit, last_bit, FALSE, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &coll_begin);
+				rd_insert_main_item_node(first_bit, first_bit, last_bit, -1, -1, rd_item_node_value, caps_idx, value_caps[rt_idx][caps_idx].LinkCollection, rt_idx, value_caps[rt_idx][caps_idx].ReportID, &coll_begin);
 			}
 		}
 
@@ -1229,7 +1216,7 @@ free(coll_last_written_child);
 					// INPUT, OUTPUT or FEATURE
 					if (list->FirstBit != -1) {
 						if (last_bit_position[list->MainItemType][list->ReportID] + 1 != list->FirstBit) {
-							rd_insert_main_item_node(last_bit_position[list->MainItemType][list->ReportID], last_bit_position[list->MainItemType][list->ReportID], list->FirstBit - 1, TRUE, -1, 0, list->MainItemType, list->ReportID, &last_report_item_lookup[list->MainItemType][list->ReportID]);
+							rd_insert_main_item_node(last_bit_position[list->MainItemType][list->ReportID], last_bit_position[list->MainItemType][list->ReportID], list->FirstBit - 1, -1, -1, rd_item_node_padding, -1, 0, list->MainItemType, list->ReportID, &last_report_item_lookup[list->MainItemType][list->ReportID]);
 						}
 						last_bit_position[list->MainItemType][list->ReportID] = list->LastBit;
 						last_report_item_lookup[list->MainItemType][list->ReportID] = list;
@@ -1243,7 +1230,7 @@ free(coll_last_written_child);
 					if (last_bit_position[rt_idx][reportid_idx] != -1) {
 						int padding = 8 - ((last_bit_position[rt_idx][reportid_idx] + 1) % 8);
 						if (padding < 8) {
-							rd_insert_main_item_node(last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx] + padding, TRUE, -1, 0, rt_idx, reportid_idx, &last_report_item_lookup[rt_idx][reportid_idx]);
+							rd_insert_main_item_node(last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx], last_bit_position[rt_idx][reportid_idx] + padding, -1, -1, rd_item_node_padding, -1, 0, rt_idx, reportid_idx, &last_report_item_lookup[rt_idx][reportid_idx]);
 						}
 					}
 				}
@@ -1293,209 +1280,223 @@ free(coll_last_written_child);
 					printf("Collection (nnn)\n");
 				}
 			}
-			else if(main_item_list->MainItemType == rd_collection_end) {
+			else if (main_item_list->MainItemType == rd_collection_end) {
 				rd_write_short_item(rd_main_collection_end, 0, &byte_list);
 				printf("End Collection\n");
 			}
-			else if (main_item_list->IsButton) {
-				if (caps_idx == -1) {
-					// Padding 
+			else if (main_item_list->TypeOfNode == rd_item_node_padding) {
+				// Padding 
 
-					rd_write_short_item(rd_global_report_size, (main_item_list->LastBit - main_item_list->FirstBit), &byte_list);
-					printf("Report Size (%d)\n", (main_item_list->LastBit - main_item_list->FirstBit));
+				rd_write_short_item(rd_global_report_size, (main_item_list->LastBit - main_item_list->FirstBit), &byte_list);
+				printf("Report Size (%d)\n", (main_item_list->LastBit - main_item_list->FirstBit));
 
-					rd_write_short_item(rd_global_report_count, 1, &byte_list);
-					printf("Report Count (%d)\n", 1);
+				rd_write_short_item(rd_global_report_count, 1, &byte_list);
+				printf("Report Count (%d)\n", 1);
 
-					if (rt_idx == HidP_Input) {
-						rd_write_short_item(rd_main_input, 0x03, &byte_list); // Const / Abs
-						printf("Input (0x%02X) Padding\n", 0x03);
-					}
-					else if (rt_idx == HidP_Output) {
-						rd_write_short_item(rd_main_output, 0x03, &byte_list); // Const / Abs
-						printf("Output (0x%02X) Padding\n", 0x03);
-					}
-					else if (rt_idx == HidP_Feature) {
-						rd_write_short_item(rd_main_feature, 0x03, &byte_list); // Const / Abs
-						printf("Feature (0x%02X) Padding\n", 0x03);
-					}
-					report_count = 0;
-				} else {
-					// Button
-						if (last_report_id != button_caps[rt_idx][caps_idx].ReportID) {
-							// Write Report ID if changed
-							rd_write_short_item(rd_global_report_id, button_caps[rt_idx][caps_idx].ReportID, &byte_list);
-							printf("Report ID (%d)\n", button_caps[rt_idx][caps_idx].ReportID);
-							last_report_id = button_caps[rt_idx][caps_idx].ReportID;
-						}
+				if (rt_idx == HidP_Input) {
+					rd_write_short_item(rd_main_input, 0x03, &byte_list); // Const / Abs
+					printf("Input (0x%02X) Padding\n", 0x03);
+				}
+				else if (rt_idx == HidP_Output) {
+					rd_write_short_item(rd_main_output, 0x03, &byte_list); // Const / Abs
+					printf("Output (0x%02X) Padding\n", 0x03);
+				}
+				else if (rt_idx == HidP_Feature) {
+					rd_write_short_item(rd_main_feature, 0x03, &byte_list); // Const / Abs
+					printf("Feature (0x%02X) Padding\n", 0x03);
+				}
+				report_count = 0;
+			} else if (main_item_list->TypeOfNode == rd_item_node_button) {
+				// Button
+				if (last_report_id != button_caps[rt_idx][caps_idx].ReportID) {
+					// Write Report ID if changed
+					rd_write_short_item(rd_global_report_id, button_caps[rt_idx][caps_idx].ReportID, &byte_list);
+					printf("Report ID (%d)\n", button_caps[rt_idx][caps_idx].ReportID);
+					last_report_id = button_caps[rt_idx][caps_idx].ReportID;
+				}
 
-						// Print usage page when changed
-						if (button_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
-							rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage, &byte_list);
-							printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
-							last_usage_page = button_caps[rt_idx][caps_idx].UsagePage;
-						}
+				// Print usage page when changed
+				if (button_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
+					rd_write_short_item(rd_global_usage_page, button_caps[rt_idx][caps_idx].UsagePage, &byte_list);
+					printf("Usage Page (%d)\n", button_caps[rt_idx][caps_idx].UsagePage);
+					last_usage_page = button_caps[rt_idx][caps_idx].UsagePage;
+				}
 
-						// Print only local report items for each cap, if ReportCount > 1
-						if (button_caps[rt_idx][caps_idx].IsRange) {
-							report_count += (button_caps[rt_idx][caps_idx].Range.DataIndexMax - button_caps[rt_idx][caps_idx].Range.DataIndexMin);
-							rd_write_short_item(rd_local_usage_minimum, button_caps[rt_idx][caps_idx].Range.UsageMin, &byte_list);
-							printf("Usage Minimum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMin);
-							rd_write_short_item(rd_local_usage_maximum, button_caps[rt_idx][caps_idx].Range.UsageMax, &byte_list);
-							printf("Usage Maximum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMax);
-						}
-						else {
-							rd_write_short_item(rd_local_usage, button_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
-							printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
-						}
-
-						if ((main_item_list->next != NULL) &&
-							(main_item_list->next->MainItemType == rt_idx) &&
-							(main_item_list->next->IsButton == TRUE) &&
-							(main_item_list->next->CapsIndex != -1) && //Padding
-							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == button_caps[rt_idx][caps_idx].UsagePage) &&
-							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == button_caps[rt_idx][caps_idx].ReportID) &&
-							(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitField == button_caps[rt_idx][caps_idx].BitField)
-							) {
-							// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
-							report_count++;
-						}
-						else {
-							
-							rd_write_short_item(rd_global_logical_minimum, 0, &byte_list);
-							printf("Logical Minimum (%d)\n", 0);
-
-							rd_write_short_item(rd_global_logical_maximum, 1, &byte_list);
-							printf("Logical Maximum (%d)\n", 1);
-
-							rd_write_short_item(rd_global_report_size, 1, &byte_list);
-							printf("Report Size (%d)\n", 1);
-
-							rd_write_short_item(rd_global_report_count, 1 + report_count, &byte_list);
-							printf("Report Count (%d)\n", 1 + report_count);
-
-							if (rt_idx == HidP_Input) {
-								rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
-							}
-							else if (rt_idx == HidP_Output) {
-								rd_write_short_item(rd_main_output, button_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Output (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
-							}
-							else if (rt_idx == HidP_Feature) {
-								rd_write_short_item(rd_main_feature, button_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Feature (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
-							}
-							report_count = 0;
-						}
-					}
+				// Print only local report items for each cap, if ReportCount > 1
+				if (button_caps[rt_idx][caps_idx].IsRange) {
+					report_count += (button_caps[rt_idx][caps_idx].Range.DataIndexMax - button_caps[rt_idx][caps_idx].Range.DataIndexMin);
+					rd_write_short_item(rd_local_usage_minimum, button_caps[rt_idx][caps_idx].Range.UsageMin, &byte_list);
+					printf("Usage Minimum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMin);
+					rd_write_short_item(rd_local_usage_maximum, button_caps[rt_idx][caps_idx].Range.UsageMax, &byte_list);
+					printf("Usage Maximum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMax);
 				}
 				else {
-					if (caps_idx != -1) {
-						if (last_report_id != value_caps[rt_idx][caps_idx].ReportID) {
-							// Write Report ID if changed
-							rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID, &byte_list);
-							printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
-							last_report_id = value_caps[rt_idx][caps_idx].ReportID;
-						}
-
-						// Print usage page when changed
-						if (value_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
-							rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage, &byte_list);
-							printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
-							last_usage_page = value_caps[rt_idx][caps_idx].UsagePage;
-						}
-
-						// Print only local report items for each cap, if ReportCount > 1
-						if (value_caps[rt_idx][caps_idx].IsRange) {
-							rd_write_short_item(rd_local_usage_minimum, value_caps[rt_idx][caps_idx].Range.UsageMin, &byte_list);
-							printf("Usage Minimum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMin);
-							rd_write_short_item(rd_local_usage_maximum, value_caps[rt_idx][caps_idx].Range.UsageMax, &byte_list);
-							printf("Usage Maximum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMax);
-						}
-						else {
-							rd_write_short_item(rd_local_usage, value_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
-							printf("Usage (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
-						}
-							
-						if ((main_item_list->next != NULL) &&
-							(main_item_list->next->MainItemType == rt_idx) &&
-							(main_item_list->next->IsButton == FALSE) &&
-							(main_item_list->next->CapsIndex != -1) && // Padding
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == value_caps[rt_idx][caps_idx].UsagePage) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].LogicalMin == value_caps[rt_idx][caps_idx].LogicalMin) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].LogicalMax == value_caps[rt_idx][caps_idx].LogicalMax) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].PhysicalMin == value_caps[rt_idx][caps_idx].PhysicalMin) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].PhysicalMax == value_caps[rt_idx][caps_idx].PhysicalMax) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UnitsExp == value_caps[rt_idx][caps_idx].UnitsExp) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].Units == value_caps[rt_idx][caps_idx].Units) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitSize == value_caps[rt_idx][caps_idx].BitSize) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == value_caps[rt_idx][caps_idx].ReportID) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitField == value_caps[rt_idx][caps_idx].BitField) &&
-							(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportCount == 1) &&
-							(value_caps[rt_idx][caps_idx].ReportCount == 1)
-							) {
-							// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
-							report_count++;
-						}
-						else {
-
-							rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin, &byte_list);
-							printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
-
-							rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax, &byte_list);
-							printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
-
-							if ((last_physical_min != value_caps[rt_idx][caps_idx].PhysicalMin) ||
-								(last_physical_max != value_caps[rt_idx][caps_idx].PhysicalMax)) {
-								// Write Physical Min and Max only if one of them changed
-								rd_write_short_item(rd_global_physical_minimum, value_caps[rt_idx][caps_idx].PhysicalMin, &byte_list);
-								printf("Physical Minimum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMin);
-								last_physical_min = value_caps[rt_idx][caps_idx].PhysicalMin;
-
-								rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].PhysicalMax, &byte_list);
-								printf("Physical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
-								last_physical_max = value_caps[rt_idx][caps_idx].PhysicalMax;
-							}
-							
-
-							if (last_unit_exponent != value_caps[rt_idx][caps_idx].UnitsExp) {
-								// Write Unit Exponent only if changed
-								rd_write_short_item(rd_global_unit_exponent, value_caps[rt_idx][caps_idx].UnitsExp, &byte_list);
-								printf("Unit Exponent (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
-								last_unit_exponent = value_caps[rt_idx][caps_idx].UnitsExp;
-							}
-
-							if (last_unit != value_caps[rt_idx][caps_idx].Units) {
-								// Write Unit only if changed
-								rd_write_short_item(rd_global_unit, value_caps[rt_idx][caps_idx].Units, &byte_list);
-								printf("Unit (%d)\n", value_caps[rt_idx][caps_idx].Units);
-								last_unit = value_caps[rt_idx][caps_idx].Units;
-							}
-
-							rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize, &byte_list);
-							printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
-
-							rd_write_short_item(rd_global_report_count, value_caps[rt_idx][caps_idx].ReportCount + report_count, &byte_list);
-							printf("Report Count (%d)\n", value_caps[rt_idx][caps_idx].ReportCount + report_count);
-
-							if (rt_idx == HidP_Input) {
-								rd_write_short_item(rd_main_input, value_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Input (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
-							}
-							else if (rt_idx == HidP_Output) {
-								rd_write_short_item(rd_main_output, value_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Output (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
-							}
-							else if (rt_idx == HidP_Feature) {
-								rd_write_short_item(rd_main_feature, value_caps[rt_idx][caps_idx].BitField, &byte_list);
-								printf("Feature (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
-							}
-							report_count = 0;
-						}
-					}
+					rd_write_short_item(rd_local_usage, button_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
+					printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
 				}
 
+				if ((main_item_list->next != NULL) &&
+					(main_item_list->next->MainItemType == rt_idx) &&
+					(main_item_list->next->TypeOfNode == rd_item_node_button) &&
+					(main_item_list->next->ButtonArrayCount == -1) && // Next node in list is no Button array
+					(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == button_caps[rt_idx][caps_idx].UsagePage) &&
+					(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == button_caps[rt_idx][caps_idx].ReportID) &&
+					(button_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitField == button_caps[rt_idx][caps_idx].BitField)
+					) {
+					// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
+					report_count++;
+				}
+				else {
+
+					if (main_item_list->ButtonArrayCount == -1) {
+						// Variable bit field with one bit per button
+
+						rd_write_short_item(rd_global_logical_minimum, 0, &byte_list);
+						printf("Logical Minimum (%d)\n", 0);
+
+						rd_write_short_item(rd_global_logical_maximum, 1, &byte_list);
+						printf("Logical Maximum (%d)\n", 1);
+
+						rd_write_short_item(rd_global_report_size, 1, &byte_list);
+						printf("Report Size (%d)\n", 1);
+
+						rd_write_short_item(rd_global_report_count, 1 + report_count, &byte_list);
+						printf("Report Count (%d)\n", 1 + report_count);
+					}
+					else {
+						// Button array of Report Size x Report Count
+						rd_write_short_item(rd_global_logical_minimum, button_caps[rt_idx][caps_idx].Range.UsageMin, &byte_list);
+						printf("Logical Minimum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMin);
+
+						rd_write_short_item(rd_global_logical_maximum, button_caps[rt_idx][caps_idx].Range.UsageMax, &byte_list);
+						printf("Logical Maximum (%d)\n", button_caps[rt_idx][caps_idx].Range.UsageMax);
+								
+						rd_write_short_item(rd_global_report_size, main_item_list->ButtonArraySize, &byte_list);
+						printf("Report Size (%d)\n", main_item_list->ButtonArraySize);
+
+						rd_write_short_item(rd_global_report_count, main_item_list->ButtonArrayCount, &byte_list);
+						printf("Report Count (%d)\n", main_item_list->ButtonArrayCount);
+					}
+
+					if (rt_idx == HidP_Input) {
+						rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField, &byte_list);
+						printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+					}
+					else if (rt_idx == HidP_Output) {
+						rd_write_short_item(rd_main_output, button_caps[rt_idx][caps_idx].BitField, &byte_list);
+						printf("Output (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+					}
+					else if (rt_idx == HidP_Feature) {
+						rd_write_short_item(rd_main_feature, button_caps[rt_idx][caps_idx].BitField, &byte_list);
+						printf("Feature (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
+					}
+					report_count = 0;
+				}					
+			}
+			else {
+				if (caps_idx != -1) {
+					if (last_report_id != value_caps[rt_idx][caps_idx].ReportID) {
+						// Write Report ID if changed
+						rd_write_short_item(rd_global_report_id, value_caps[rt_idx][caps_idx].ReportID, &byte_list);
+						printf("Report ID (%d)\n", value_caps[rt_idx][caps_idx].ReportID);
+						last_report_id = value_caps[rt_idx][caps_idx].ReportID;
+					}
+
+					// Print usage page when changed
+					if (value_caps[rt_idx][caps_idx].UsagePage != last_usage_page) {
+						rd_write_short_item(rd_global_usage_page, value_caps[rt_idx][caps_idx].UsagePage, &byte_list);
+						printf("Usage Page (%d)\n", value_caps[rt_idx][caps_idx].UsagePage);
+						last_usage_page = value_caps[rt_idx][caps_idx].UsagePage;
+					}
+
+					// Print only local report items for each cap, if ReportCount > 1
+					if (value_caps[rt_idx][caps_idx].IsRange) {
+						rd_write_short_item(rd_local_usage_minimum, value_caps[rt_idx][caps_idx].Range.UsageMin, &byte_list);
+						printf("Usage Minimum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMin);
+						rd_write_short_item(rd_local_usage_maximum, value_caps[rt_idx][caps_idx].Range.UsageMax, &byte_list);
+						printf("Usage Maximum (%d)\n", value_caps[rt_idx][caps_idx].Range.UsageMax);
+					}
+					else {
+						rd_write_short_item(rd_local_usage, value_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
+						printf("Usage (%d)\n", value_caps[rt_idx][caps_idx].NotRange.Usage);
+					}
+							
+					if ((main_item_list->next != NULL) &&
+						(main_item_list->next->MainItemType == rt_idx) &&
+						(main_item_list->next->TypeOfNode == rd_item_node_value) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UsagePage == value_caps[rt_idx][caps_idx].UsagePage) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].LogicalMin == value_caps[rt_idx][caps_idx].LogicalMin) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].LogicalMax == value_caps[rt_idx][caps_idx].LogicalMax) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].PhysicalMin == value_caps[rt_idx][caps_idx].PhysicalMin) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].PhysicalMax == value_caps[rt_idx][caps_idx].PhysicalMax) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].UnitsExp == value_caps[rt_idx][caps_idx].UnitsExp) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].Units == value_caps[rt_idx][caps_idx].Units) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitSize == value_caps[rt_idx][caps_idx].BitSize) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportID == value_caps[rt_idx][caps_idx].ReportID) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].BitField == value_caps[rt_idx][caps_idx].BitField) &&
+						(value_caps[main_item_list->next->MainItemType][main_item_list->next->CapsIndex].ReportCount == 1) &&
+						(value_caps[rt_idx][caps_idx].ReportCount == 1)
+						) {
+						// Skip global items until any of them changes, than use ReportCount item to write the count of identical report fields
+						report_count++;
+					}
+					else {
+
+						rd_write_short_item(rd_global_logical_minimum, value_caps[rt_idx][caps_idx].LogicalMin, &byte_list);
+						printf("Logical Minimum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMin);
+
+						rd_write_short_item(rd_global_logical_maximum, value_caps[rt_idx][caps_idx].LogicalMax, &byte_list);
+						printf("Logical Maximum (%d)\n", value_caps[rt_idx][caps_idx].LogicalMax);
+
+						if ((last_physical_min != value_caps[rt_idx][caps_idx].PhysicalMin) ||
+							(last_physical_max != value_caps[rt_idx][caps_idx].PhysicalMax)) {
+							// Write Physical Min and Max only if one of them changed
+							rd_write_short_item(rd_global_physical_minimum, value_caps[rt_idx][caps_idx].PhysicalMin, &byte_list);
+							printf("Physical Minimum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMin);
+							last_physical_min = value_caps[rt_idx][caps_idx].PhysicalMin;
+
+							rd_write_short_item(rd_global_physical_maximum, value_caps[rt_idx][caps_idx].PhysicalMax, &byte_list);
+							printf("Physical Maximum (%d)\n", value_caps[rt_idx][caps_idx].PhysicalMax);
+							last_physical_max = value_caps[rt_idx][caps_idx].PhysicalMax;
+						}
+							
+
+						if (last_unit_exponent != value_caps[rt_idx][caps_idx].UnitsExp) {
+							// Write Unit Exponent only if changed
+							rd_write_short_item(rd_global_unit_exponent, value_caps[rt_idx][caps_idx].UnitsExp, &byte_list);
+							printf("Unit Exponent (%d)\n", value_caps[rt_idx][caps_idx].UnitsExp);
+							last_unit_exponent = value_caps[rt_idx][caps_idx].UnitsExp;
+						}
+
+						if (last_unit != value_caps[rt_idx][caps_idx].Units) {
+							// Write Unit only if changed
+							rd_write_short_item(rd_global_unit, value_caps[rt_idx][caps_idx].Units, &byte_list);
+							printf("Unit (%d)\n", value_caps[rt_idx][caps_idx].Units);
+							last_unit = value_caps[rt_idx][caps_idx].Units;
+						}
+
+						rd_write_short_item(rd_global_report_size, value_caps[rt_idx][caps_idx].BitSize, &byte_list);
+						printf("Report Size (%d)\n", value_caps[rt_idx][caps_idx].BitSize);
+
+						rd_write_short_item(rd_global_report_count, value_caps[rt_idx][caps_idx].ReportCount + report_count, &byte_list);
+						printf("Report Count (%d)\n", value_caps[rt_idx][caps_idx].ReportCount + report_count);
+
+						if (rt_idx == HidP_Input) {
+							rd_write_short_item(rd_main_input, value_caps[rt_idx][caps_idx].BitField, &byte_list);
+							printf("Input (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Output) {
+							rd_write_short_item(rd_main_output, value_caps[rt_idx][caps_idx].BitField, &byte_list);
+							printf("Output (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						else if (rt_idx == HidP_Feature) {
+							rd_write_short_item(rd_main_feature, value_caps[rt_idx][caps_idx].BitField, &byte_list);
+							printf("Feature (0x%02X)\n", value_caps[rt_idx][caps_idx].BitField);
+						}
+						report_count = 0;
+					}
+				}
+			}
 			main_item_list = main_item_list->next;
 		}
 		
