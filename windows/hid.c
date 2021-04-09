@@ -786,10 +786,10 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 	else {
 		// Array (0)
 
-		/// !!! This is untested funtionality, because I have no device with value array for test !!!
+		// EXPERIMENTAL - No device available for test
 
 		int number_of_dummy_usage_bits = (value_cap->ReportCount * value_cap->BitSize + 7);
-
+		
 		PUCHAR usage_value = malloc(number_of_dummy_usage_bits / 8 * sizeof(unsigned char));
 
 		for (int i = 0; i < number_of_dummy_usage_bits / 8; i++) { usage_value[i] = 0xFF; }
@@ -799,6 +799,7 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 			*(last_bit) = *(first_bit)+(value_cap->ReportCount * value_cap->BitSize) - 1;
 		}
 		free(usage_value);
+		// EXPERIMENTAL - No device available for test
 	}
 	free(dummy_report);
 }
@@ -1382,6 +1383,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					rd_write_short_item(rd_local_usage, button_caps[rt_idx][caps_idx].NotRange.Usage, &byte_list);
 					printf("Usage (%d)\n", button_caps[rt_idx][caps_idx].NotRange.Usage);
 				}
+				// EXPERIMENTAL - No device available for test
 				NTSTATUS status;
 				ULONG data[10];
 				HIDP_EXTENDED_ATTRIBUTES attribs;
@@ -1389,8 +1391,9 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				ULONG attrib_len = sizeof(HIDP_EXTENDED_ATTRIBUTES);
 				status = HidP_GetExtendedAttributes(rt_idx, button_caps[rt_idx][caps_idx].NotRange.DataIndex, pp_data, &attribs, &attrib_len);
 				if (attribs.NumGlobalUnknowns > 0) {
-					printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Found unknown Global HID items - stored in HIDP_EXTENDED_ATTRIBUTES structure");
+					printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Found Global HID items unknown by Windows hidpi - these are now stored in HIDP_EXTENDED_ATTRIBUTES structure");
 				}
+				// EXPERIMENTAL - No device available for test
 
 				if ((main_item_list->next != NULL) &&
 					(main_item_list->next->MainItemType == rt_idx) &&
@@ -1451,6 +1454,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				}					
 			}
 			else {
+				// EXPERIMENTAL - No device available for test
 				NTSTATUS status;
 				ULONG data[10];
 				HIDP_EXTENDED_ATTRIBUTES attribs;
@@ -1458,8 +1462,9 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				ULONG attrib_len = sizeof(HIDP_EXTENDED_ATTRIBUTES);
 				status = HidP_GetExtendedAttributes(rt_idx, value_caps[rt_idx][caps_idx].NotRange.DataIndex, pp_data, &attribs, &attrib_len);
 				if (attribs.NumGlobalUnknowns > 0) {
-					printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Found unknown Global HID items - stored in HIDP_EXTENDED_ATTRIBUTES structure");
+					printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Found Global HID items unknown by Windows hidpi - these are now stored in HIDP_EXTENDED_ATTRIBUTES structure");
 				}
+				// EXPERIMENTAL - No device available for test
 
 				if (last_report_id != value_caps[rt_idx][caps_idx].ReportID) {
 					// Write Report ID if changed
