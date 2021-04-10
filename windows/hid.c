@@ -278,12 +278,12 @@ static struct hid_api_version api_version = {
 	typedef BOOLEAN (__stdcall *HidD_SetNumInputBuffers_)(HANDLE handle, ULONG number_buffers);
 	typedef NTSTATUS (__stdcall *HidP_GetLinkCollectionNodes_)(PHIDP_LINK_COLLECTION_NODE link_collection_nodes, PULONG link_collection_nodes_length, PHIDP_PREPARSED_DATA preparsed_data);
 	typedef NTSTATUS (__stdcall *HidP_GetButtonCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_BUTTON_CAPS button_caps, PUSHORT button_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS(__stdcall *HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
-	typedef NTSTATUS(__stdcall *HidP_SetData_)(HIDP_REPORT_TYPE report_type, PHIDP_DATA data_list, PULONG data_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_SetUsageValueArray_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, USAGE usage, PCHAR usage_value,	USHORT usage_value_byte_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_SetUsages_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, PUSAGE usage_list, PULONG usage_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_UnsetUsages_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, PUSAGE usage_list, PULONG usage_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
-	typedef NTSTATUS(__stdcall* HidP_GetExtendedAttributes_)(HIDP_REPORT_TYPE report_type, USHORT data_index, PHIDP_PREPARSED_DATA preparsed_data, PHIDP_EXTENDED_ATTRIBUTES attributes, PULONG length_attributes);
+	typedef NTSTATUS (__stdcall *HidP_GetValueCaps_)(HIDP_REPORT_TYPE report_type, PHIDP_VALUE_CAPS value_caps,	PUSHORT value_caps_length, PHIDP_PREPARSED_DATA preparsed_data);
+	typedef NTSTATUS (__stdcall *HidP_SetData_)(HIDP_REPORT_TYPE report_type, PHIDP_DATA data_list, PULONG data_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+	typedef NTSTATUS (__stdcall* HidP_SetUsageValueArray_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, USAGE usage, PCHAR usage_value,	USHORT usage_value_byte_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+	typedef NTSTATUS (__stdcall* HidP_SetUsages_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, PUSAGE usage_list, PULONG usage_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+	typedef NTSTATUS (__stdcall* HidP_UnsetUsages_)(HIDP_REPORT_TYPE report_type, USAGE usage_page, USHORT link_collection, PUSAGE usage_list, PULONG usage_length, PHIDP_PREPARSED_DATA preparsed_data, PCHAR report, ULONG report_length);
+	typedef NTSTATUS (__stdcall* HidP_GetExtendedAttributes_)(HIDP_REPORT_TYPE report_type, USHORT data_index, PHIDP_PREPARSED_DATA preparsed_data, PHIDP_EXTENDED_ATTRIBUTES attributes, PULONG length_attributes);
 	
 
 	static HidD_GetAttributes_ HidD_GetAttributes;
@@ -439,7 +439,7 @@ static int lookup_functions()
 /// The two least significiant bits nn represent the size of the item and must be added to this values
 /// </summary>
 typedef enum rd_items_ {
-	rd_main_input =			      0x80, ///< 1000 00 nn
+	rd_main_input = 0x80, ///< 1000 00 nn
 	rd_main_output =			  0x90, ///< 1001 00 nn
 	rd_main_feature =			  0xB0, ///< 1011 00 nn
 	rd_main_collection =		  0xA0, ///< 1010 00 nn
@@ -601,9 +601,9 @@ static int rd_write_long_item(unsigned char* data, unsigned char bLongItemTag, u
 /// </summary>
 /// <param name="dummy_report">Report array</param>
 /// <param name="max_report_length">Length of the report in bytes</param>
-/// <returns>Position of the determined bit (first bit postion is 0)</returns>
+/// <returns>Position of the determined bit (postion of first bit is 0)</returns>
 static int rd_find_first_one_bit(char* dummy_report, unsigned int max_report_length) {
-	int first_bit = -1;
+	int first_one_bit = -1;
 	for (unsigned int byteIdx = 1; byteIdx < max_report_length; byteIdx++)
 	{
 		if (dummy_report[byteIdx] != 0) {
@@ -611,14 +611,40 @@ static int rd_find_first_one_bit(char* dummy_report, unsigned int max_report_len
 			{
 				if (dummy_report[byteIdx] & (0x01 << bitIdx))
 				{
-					first_bit = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID not counted
+					first_one_bit = 8 * (byteIdx - 1) + bitIdx;// First byte with the Report ID isn't counted
 					break;
 				}
 			}
 			break;
 		}
 	}
-	return first_bit;
+	return first_one_bit;
+}
+
+/// <summary>
+/// Function that determines the last bit in 1 state in a report
+/// (The first byte containing the Report-ID byte is ignored and not counted)
+/// </summary>
+/// <param name="dummy_report">Report array</param>
+/// <param name="max_report_length">Length of the report in bytes</param>
+/// <returns>Position of the determined bit (postion of first bit is 0)</returns>
+static int rd_find_last_one_bit(char* dummy_report, unsigned int max_report_length) {
+	int last_one_bit = -1;
+	for (unsigned int byteIdx = max_report_length - 1; byteIdx > 1; byteIdx--)
+	{
+		if (dummy_report[byteIdx] != 0) {
+			for (int bitIdx = 0; bitIdx < 7; bitIdx--)
+			{
+				if (dummy_report[byteIdx] & (0x01 << bitIdx))
+				{
+					last_one_bit = 8 * (byteIdx - 1) + (8 - bitIdx); // First byte with the Report ID isn't counted
+					break;
+				}
+			}
+			break;
+		}
+	}
+	return last_one_bit;
 }
 
 /// <summary>
@@ -674,16 +700,20 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 			*(button_array_size) = -1;
 		}
 		else if (status == HIDP_STATUS_IS_VALUE_ARRAY) {
-			// Not implemented yet
+			// NOT WORKING YET !!!!!!!!!!!!!!!!!!!!
 			// According to https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_setdata 
 			// -> Except for usage value arrays, a user - mode application or kernel - mode driver can use HidP_SetData to set buttons and usage values in a report.To set a usage value array, an application or driver must use HidP_SetUsageValueArray.
-			for (unsigned int i = 1; i < max_report_length; i++) {
-				dummy_report[i] = 0x00;
+			CHAR usage_list[2] = { 0xFF,0xFF };
+			USHORT datalength = 2;
+			status = HidP_SetUsageValueArray(report_type, button_cap->UsagePage, button_cap->LinkCollection, button_cap->NotRange.Usage, &usage_list[0], datalength, pp_data, dummy_report, max_report_length);
+
+			if (status == HIDP_STATUS_SUCCESS) {
+				*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
+				*(last_bit) = rd_find_last_one_bit(dummy_report, max_report_length);
+				*(button_array_count) = *(last_bit)-*(first_bit)+1;
+				*(button_array_size) = 1; // This is known, because it's recognized as button_cap
 			}
-			ULONG usage_len = 2;
-			USAGE usage_list[2] = {0x00,0x00};
-			status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, usage_list, &usage_len, pp_data, dummy_report, max_report_length);
-			*(first_bit) = rd_find_first_one_bit(dummy_report, max_report_length);
+			// NOT WORKING YET !!!!!!!!!!!!!!!!!!!!!
 		}
 	}
 	else {
@@ -723,20 +753,78 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 			if (status == HIDP_STATUS_SUCCESS) {
 				int local_first_bit = rd_find_first_one_bit(dummy_report, max_report_length);
 				if ((local_first_bit != -1) &&
-					((*(first_bit) == -1)||
-					(local_first_bit < *(first_bit)))) {
+					((*(first_bit) == -1) ||
+						(local_first_bit < *(first_bit)))) {
 					*(first_bit) = local_first_bit;
 				}
 			}
 		}
-				
-		// Calculate how many bits are needed t represent Usage Max
-		int number_of_bits = 0; // Number of bits needed to represent the maximum usage value
-		USAGE temp = button_cap->Range.UsageMax;
-		while (temp >= 1) { temp = temp >> 1; ++number_of_bits; }
-		*(last_bit) = *(first_bit)+(report_count * number_of_bits)-1;
-		*(button_array_count) = report_count;
-		*(button_array_size) = number_of_bits;
+		
+		if (report_count == 1 || !button_cap->IsRange || (button_cap->Range.UsageMin == 0 && button_cap->Range.UsageMax <= 1)) {
+			// Calculate how many bits are needed to represent the maximum usage value
+			// The condition (button_cap->Range.UsageMin == 0 && button_cap->Range.UsageMax <= 1) is 
+			// a needed, because the algorithm for multiple array elements can only work with two or more usages != 0
+			int number_of_bits = 0; // Number of bits needed to represent the (maximum) usage value
+			USAGE temp;
+			if (button_cap->IsRange) {
+				temp = button_cap->Range.UsageMax;
+			}
+			else
+			{
+				temp = button_cap->NotRange.Usage;
+			}
+			while (temp >= 1) { temp = temp >> 1; ++number_of_bits; }
+			*(last_bit) = *(first_bit)+(report_count * number_of_bits) - 1;
+			*(button_array_count) = report_count;
+			*(button_array_size) = number_of_bits;
+		}
+		else {
+			// An array with multiple elements might have padding bits after each value
+			// e.g. a 102 key keyboard needs only 7 bit to represent all keys, but the array 
+			//      has always 8 bit elements
+			// To cover this case, it's not suficient to know only the bit positions of the first array element,
+			// it's necessary to detect the bit positions of another array element too.
+
+			// Find last bit position of first and second array element (for UsageMax)
+
+			ULONG   usage_len;
+			USAGE   usage_list[2];
+
+			// Set only first array element (first usage => UsageMax)
+			usage_len = 1;
+			usage_list[0] = button_cap->Range.UsageMax;
+			int first_element_last_bit = -1;
+
+			for (unsigned int i = 1; i < max_report_length; i++) {
+				dummy_report[i] = 0x00;
+			}
+
+			status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list[0], &usage_len, pp_data, dummy_report, max_report_length);
+			if (status == HIDP_STATUS_SUCCESS) {
+				first_element_last_bit = rd_find_last_one_bit(dummy_report, max_report_length);
+			}
+			
+
+			// fill first array element with data (first usage => UsageMax-1)
+			// Set second array element (second usage => UsageMax)
+			usage_len = 2;
+			usage_list[0] = button_cap->Range.UsageMax-1;
+			usage_list[1] = button_cap->Range.UsageMax;
+			int second_element_last_bit = -1;
+
+			for (unsigned int i = 1; i < max_report_length; i++) {
+				dummy_report[i] = 0x00;
+			}
+
+			status = HidP_SetUsages(report_type, button_cap->UsagePage, button_cap->LinkCollection, &usage_list[0], &usage_len, pp_data, dummy_report, max_report_length);
+			if (status == HIDP_STATUS_SUCCESS) {
+				second_element_last_bit = rd_find_last_one_bit(dummy_report, max_report_length);
+			}
+			int bit_distance_between_array_elements = second_element_last_bit - first_element_last_bit;
+			*(last_bit) = *(first_bit)+(report_count * bit_distance_between_array_elements) - 1;
+			*(button_array_count) = report_count;
+			*(button_array_size) = bit_distance_between_array_elements;
+		}
 	}
 	free(dummy_report);
 }
@@ -765,8 +853,6 @@ static void rd_determine_value_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP_
 		
 	*(first_bit) = -1;
 	*(last_bit) = -1;
-
-	/*if (value_cap->ReportCount == value_cap->Range.DataIndexMax - value_cap->Range.DataIndexMin + 1) {*/
 
 	// USB HID spec 1.11 chapter 6.2.2.4 Main Items, defines bit 1 as: {Array (0) | Variable (1)}  
 	if ((value_cap->BitField & 0x02) == 0x02) {
@@ -974,7 +1060,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 			coll_bit_range[collection_node_idx] = malloc(256 * sizeof(coll_bit_range[0])); // 256 possible report IDs (incl. 0x00)
 			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
 				coll_bit_range[collection_node_idx][reportid_idx] = malloc(NUM_OF_HIDP_REPORT_TYPES * sizeof(coll_bit_range[0][0]));
-				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+				for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 					coll_bit_range[collection_node_idx][reportid_idx][rt_idx] = malloc(sizeof(RD_BIT_RANGE));
 					coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->FirstBit = -1;
 					coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->LastBit = -1;
@@ -984,7 +1070,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		}
 
 		// Fill the lookup table where caps exist
-		for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+		for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
 				int first_bit, last_bit, button_array_count, button_array_size;
 				rd_determine_button_bitpositions(rt_idx, &button_caps[rt_idx][caps_idx], &first_bit, &last_bit, &button_array_count, &button_array_size, max_datalist_len[rt_idx], pp_data);
@@ -1061,7 +1147,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 					USHORT child_idx = link_collection_nodes[collection_node_idx].FirstChild;
 					while (child_idx) {
 						for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
-							for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+							for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 								// Merge bit range from childs
 								if ((coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit != -1) &&
 									(coll_bit_range[collection_node_idx][reportid_idx][rt_idx]->FirstBit > coll_bit_range[child_idx][reportid_idx][rt_idx]->FirstBit)) {
@@ -1113,7 +1199,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 
 					if (coll_number_of_direct_childs[collection_node_idx] > 1) {
 						// Sort child collections indices by bit positions
-						for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+						for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 							for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
 								for (int child_idx = 1; child_idx < coll_number_of_direct_childs[collection_node_idx]; child_idx++) {
 									if ((coll_bit_range[child_idx - 1][reportid_idx][rt_idx]->FirstBit != -1) &&
@@ -1201,7 +1287,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		// Inserted Input/Output/Feature main items into the list
 		// in order of reconstructed bit positions
 		// ******************************************************
-				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+				for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 			// Add all button caps to node list
 			for (USHORT caps_idx = 0; caps_idx < button_caps_len[rt_idx]; caps_idx++) {
 				struct rd_main_item_node* coll_begin = coll_begin_lookup[button_caps[rt_idx][caps_idx].LinkCollection];
@@ -1247,7 +1333,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 		{
 			int last_bit_position[NUM_OF_HIDP_REPORT_TYPES][256];
 			struct rd_main_item_node* last_report_item_lookup[NUM_OF_HIDP_REPORT_TYPES][256];
-			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 				for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
 					last_bit_position[rt_idx][reportid_idx] = -1;
 					last_report_item_lookup[rt_idx][reportid_idx] = NULL;
@@ -1274,7 +1360,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 				list = list->next;
 			}
 			// Add 8 bit padding at each report end
-			for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+			for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 				for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
 					if (last_bit_position[rt_idx][reportid_idx] != -1) {
 						int padding = 8 - ((last_bit_position[rt_idx][reportid_idx] + 1) % 8);
@@ -1574,7 +1660,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 
 		for (USHORT collection_node_idx = 0; collection_node_idx < link_collection_nodes_len; collection_node_idx++) {
 			for (int reportid_idx = 0; reportid_idx < 256; reportid_idx++) {
-				for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+				for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 					free(coll_bit_range[collection_node_idx][reportid_idx][rt_idx]);
 				}
 				free(coll_bit_range[collection_node_idx][reportid_idx]);
@@ -1610,7 +1696,7 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 	}
 	*report_descriptor_len = byte_list_len;
 	// Free allocated memory
-	for (int rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
+	for (HIDP_REPORT_TYPE rt_idx = 0; rt_idx < NUM_OF_HIDP_REPORT_TYPES; rt_idx++) {
 		free(button_caps[rt_idx]);
 		free(value_caps[rt_idx]);
 	}
