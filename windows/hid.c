@@ -700,11 +700,12 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 			*(button_array_size) = -1;
 		}
 		else if (status == HIDP_STATUS_IS_VALUE_ARRAY) {
-			// NOT WORKING YET !!!!!!!!!!!!!!!!!!!!
+			// NOT WORKING YET (at least not for the case of usage == 0)
 			// According to https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_setdata 
 			// -> Except for usage value arrays, a user - mode application or kernel - mode driver can use HidP_SetData to set buttons and usage values in a report.To set a usage value array, an application or driver must use HidP_SetUsageValueArray.
 			CHAR usage_list[2] = { 0xFF,0xFF };
 			USHORT datalength = 2;
+			// Problem: HidP_SetUsageValueArray sets no bits if Usage == 0
 			status = HidP_SetUsageValueArray(report_type, button_cap->UsagePage, button_cap->LinkCollection, button_cap->NotRange.Usage, &usage_list[0], datalength, pp_data, dummy_report, max_report_length);
 
 			if (status == HIDP_STATUS_SUCCESS) {
@@ -713,7 +714,7 @@ static void rd_determine_button_bitpositions(HIDP_REPORT_TYPE report_type, PHIDP
 				*(button_array_count) = *(last_bit)-*(first_bit)+1;
 				*(button_array_size) = 1; // This is known, because it's recognized as button_cap
 			}
-			// NOT WORKING YET !!!!!!!!!!!!!!!!!!!!!
+			// NOT WORKING YET (at least not for the case of usage == 0)
 		}
 	}
 	else {
