@@ -1525,6 +1525,38 @@ static int reconstruct_report_descriptor(PHIDP_PREPARSED_DATA pp_data, unsigned 
 						printf("Report Count (%d)\n", main_item_list->ButtonArrayCount);
 					}
 
+
+					// Buttons have only 1 bit and therefore no physical limits/units -> Set to undefined state
+
+					if (last_physical_min != 0) {
+						// Write Physical Min only if changed
+						last_physical_min = 0;
+						rd_write_short_item(rd_global_physical_minimum, last_physical_min, &byte_list);
+						printf("Physical Minimum (%d)\n", last_physical_min);
+					}
+
+					if (last_physical_max != 0) {
+						// Write Physical Max only if changed
+						last_physical_max = 0;
+						rd_write_short_item(rd_global_physical_maximum, last_physical_max, &byte_list);
+						printf("Physical Maximum (%d)\n", last_physical_max);
+					}
+
+					if (last_unit_exponent != 0) {
+						// Write Unit Exponent only if changed
+						last_unit_exponent = 0;
+						rd_write_short_item(rd_global_unit_exponent, last_unit_exponent, &byte_list);
+						printf("Unit Exponent (%d)\n", last_unit_exponent);
+					}
+
+					if (last_unit != 0) {
+						// Write Unit only if changed
+						last_unit = 0;
+						rd_write_short_item(rd_global_unit, last_unit, &byte_list);
+						printf("Unit (%d)\n", last_unit);
+					}
+
+
 					if (rt_idx == HidP_Input) {
 						rd_write_short_item(rd_main_input, button_caps[rt_idx][caps_idx].BitField, &byte_list);
 						printf("Input (0x%02X)\n", button_caps[rt_idx][caps_idx].BitField);
