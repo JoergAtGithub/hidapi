@@ -106,7 +106,7 @@ read_preparsed_data_from_file(char* filename, struct hid_device_info* dev, PHIDP
 					continue;
 				};
 				if (sscanf(line, "pp_data->cap[%d]->BitSize                      = %hu\n", &caps_idx, &temp_ushort) == 2) {
-					pp_data->caps[caps_idx].BitSize = temp_ushort;
+					pp_data->caps[caps_idx].ReportSize = temp_ushort;
 					continue;
 				};
 				if (sscanf(line, "pp_data->cap[%d]->ReportCount                  = %hu\n", &caps_idx, &temp_ushort) == 2) {
