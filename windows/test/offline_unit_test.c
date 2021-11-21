@@ -424,9 +424,10 @@ int main(int argc, char* argv[])
 			.write_buf=0};
 
 		int res;
-		res = rd_reconstructor(NULL, pp_data, report_descriptor, HID_API_MAX_REPORT_DESCRIPTOR_SIZE);
+		res = rd_reconstructor(&dev, pp_data, report_descriptor, HID_API_MAX_REPORT_DESCRIPTOR_SIZE);
 
 		if (res < 0) {
+			printf("%ls", hid_error(&dev));
 			return -1;
 		}
 
