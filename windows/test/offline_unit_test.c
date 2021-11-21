@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <hidapi.h>
 
-read_preparsed_data_from_file(char* filename, struct hid_device_info* dev, PHIDP_PREPARSED_DATA* pp_data2) {
+int read_preparsed_data_from_file(char* filename, struct hid_device_info* dev, PHIDP_PREPARSED_DATA* pp_data2) {
 	FILE* file;
 	errno_t err = fopen_s(&file, filename, "r");
 
@@ -362,6 +362,7 @@ read_preparsed_data_from_file(char* filename, struct hid_device_info* dev, PHIDP
 	}
 
 
+	return 1; // CTest PASS
 }
 
 
