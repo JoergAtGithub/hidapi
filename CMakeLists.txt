@@ -62,6 +62,13 @@ else()
 endif()
 
 if(HIDAPI_WITH_TESTS)
+    if(WIN32)
+        if(${CMAKE_SYSTEM_VERSION} GREATER_EQUAL 10)
+           # AddressSanitizer is supported by Windows10 or later
+            add_compile_options(-fsanitize=address)
+            add_link_options(-fsanitize=address)
+        endif()    
+    endif()    
     enable_testing()
 endif()
 
