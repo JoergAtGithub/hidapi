@@ -69,6 +69,7 @@ if(HIDAPI_WITH_TESTS)
             add_link_options(-fsanitize=address)
         endif()    
     endif()    
+    set(CTEST_OUTPUT_ON_FAILURE ON)
     enable_testing()
 endif()
 
