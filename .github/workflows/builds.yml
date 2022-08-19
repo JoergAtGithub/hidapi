@@ -120,7 +120,7 @@ jobs:
         allow_failure: true
     - name: Run CTest MSVC
       working-directory: build/msvc
-      run: set ASAN_VCASAN_DEBUGGING=1; ctest -C RelWithDebInfo --output-on-failure
+      run: set ASAN_VCASAN_DEBUGGING=1; set ASAN_SAVE_DUMPS=MyFileName.dmp; ctest -C RelWithDebInfo --output-on-failure;dir
 
     - name: Configure CMake NMake
       shell: cmd
@@ -194,6 +194,7 @@ jobs:
         Copy-Item "windows\Release\hidapi.dll","windows\Release\hidapi.lib","windows\Release\hidapi.pdb" -Destination "artifacts\x86"
         Copy-Item "windows\x64\Release\hidapi.dll","windows\x64\Release\hidapi.lib","windows\x64\Release\hidapi.pdb" -Destination "artifacts\x64"
         Copy-Item "hidapi\hidapi.h","windows\hidapi_winapi.h" -Destination "artifacts\include"
+        Copy-Item "MyFileName.dmp" -Destination "artifacts\x64"
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
