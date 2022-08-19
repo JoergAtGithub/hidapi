@@ -65,11 +65,11 @@ if(HIDAPI_WITH_TESTS)
     if(WIN32)
         if(${CMAKE_SYSTEM_VERSION} GREATER_EQUAL 10)
            # AddressSanitizer is supported by Windows10 or later
+            set ASAN_VCASAN_DEBUGGING=1
             add_compile_options(-fsanitize=address)
             add_link_options(-fsanitize=address)
         endif()    
     endif()    
-    set(CTEST_OUTPUT_ON_FAILURE ON)
     enable_testing()
 endif()
 
