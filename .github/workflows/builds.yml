@@ -120,7 +120,7 @@ jobs:
         allow_failure: true
     - name: Run CTest MSVC
       working-directory: build/msvc
-      run: ctest -C RelWithDebInfo --output-on-failure
+      run: set ASAN_VCASAN_DEBUGGING=1; ctest -C RelWithDebInfo --output-on-failure
 
     - name: Configure CMake NMake
       shell: cmd
