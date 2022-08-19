@@ -120,7 +120,7 @@ jobs:
         allow_failure: true
     - name: Run CTest MSVC
       working-directory: build/msvc
-      run: set ASAN_VCASAN_DEBUGGING=1; set ASAN_SAVE_DUMPS=MyFileName.dmp; ctest -C RelWithDebInfo --output-on-failure;dir
+      run: set ASAN_VCASAN_DEBUGGING=1; set ASAN_SAVE_DUMPS=MyFileName.dmp; ctest -C RelWithDebInfo --output-on-failure;dir /s
 
     - name: Configure CMake NMake
       shell: cmd
