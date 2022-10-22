@@ -228,7 +228,7 @@ int hid_winapi_descriptor_reconstruct_pp_data(void *preparsed_data, unsigned cha
 				coll_bit_range[pp_data->caps[caps_idx].LinkCollection][pp_data->caps[caps_idx].ReportID][rt_idx]->FirstBit > first_bit) {
 				coll_bit_range[pp_data->caps[caps_idx].LinkCollection][pp_data->caps[caps_idx].ReportID][rt_idx]->FirstBit = first_bit;
 			}
-			if (coll_bit_range[pp_data->caps[caps_idx].LinkCollection][pp_data->caps[caps_idx].ReportID][rt_idx]->LastBit < last_bit) {
+			if (coll_bit_range[pp_data->caps[caps_idx+1].LinkCollection][pp_data->caps[caps_idx].ReportID][rt_idx]->LastBit < last_bit) {
 				coll_bit_range[pp_data->caps[caps_idx].LinkCollection][pp_data->caps[caps_idx].ReportID][rt_idx]->LastBit = last_bit;
 			}
 		}
