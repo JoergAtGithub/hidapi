@@ -203,19 +203,49 @@ jobs:
       shell: cmd
       working-directory: build/msvc
       run: ctest -C RelWithDebInfo --rerun-failed --output-on-failure
+ - name: Configure CMake clang-cl
+      shell: cmd
+      run: |
+        cmake -B build\clang_cl -S hidapisrc -T ClangCL -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
+    - name: Build CMake clang-cl
+      working-directory: build/clang_cl
+      run: cmake --build . --config RelWithDebInfo --target install
+    - name: Check artifacts clang-cl
+      uses: andstor/file-existence-action@v2
+      with:
+        files: "install/clang_cl/lib/hidapi.lib, \
+                install/clang_cl/bin/hidapi.dll, \
+                install/clang_cl/include/hidapi/hidapi.h, \
+                install/clang_cl/include/hidapi/hidapi_winapi.h"
+        fail: true
+    - name: Check CMake Export Package
+      shell: cmd
+      run: |
+        cmake ^
+          -B build\clang_cl_test ^
+          -S hidapisrc\hidtest ^
+          -Dhidapi_ROOT=install\clang_cl ^
+          -DCMAKE_INSTALL_PREFIX=install\clang_cl_test ^
+          "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
+        cd build\clang_cl_test
+        cmake --build . --target install
+    - name: Run CTest clang-cl
+      shell: cmd
+      working-directory: build/clang_cl
+      run: ctest -C RelWithDebInfo --rerun-failed --output-on-failure
 
-    - name: Configure CMake NMake
+    - name: Configure CMake NMake MSVC
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
         cmake -G"NMake Makefiles" -B build\nmake -S hidapisrc -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\nmake -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
-    - name: Build CMake NMake
+    - name: Build CMake NMake MSVC
       working-directory: build\nmake
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
         nmake install
-    - name: Check artifacts NMake
+    - name: Check artifacts NMake MSVC
       uses: andstor/file-existence-action@v2
       with:
         files: "install/nmake/lib/hidapi.lib, \
@@ -287,14 +317,14 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: microsoft/setup-msbuild@v1.1
-    - name: MSBuild x86
+    - name: MSBuild x86 MSVC
       run: msbuild windows\hidapi.sln /p:Configuration=Release /p:Platform=Win32
     - name: Check artifacts x86
       uses: andstor/file-existence-action@v2
       with:
         files: "windows/Release/hidapi.dll, windows/Release/hidapi.lib, windows/Release/hidapi.pdb"
         fail: true
-    - name: MSBuild x64
+    - name: MSBuild x64 MSVC
       run: msbuild windows\hidapi.sln /p:Configuration=Release /p:Platform=x64
     - name: Check artifacts x64
       uses: andstor/file-existence-action@v2
