@@ -204,14 +204,14 @@ jobs:
       working-directory: build/msvc
       run: ctest -C RelWithDebInfo --rerun-failed --output-on-failure
 
-    - name: Configure CMake clang-cl
+    - name: Configure CMake ClangCL
       shell: cmd
       run: |
         cmake -B build\clang_cl -S hidapisrc -T ClangCL -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
-    - name: Build CMake clang-cl
+    - name: Build CMake ClangCL
       working-directory: build/clang_cl
       run: cmake --build . --config RelWithDebInfo --target install
-    - name: Check artifacts clang-cl
+    - name: Check artifacts ClangCL
       uses: andstor/file-existence-action@v2
       with:
         files: "install/clang_cl/lib/hidapi.lib, \
@@ -219,7 +219,7 @@ jobs:
                 install/clang_cl/include/hidapi/hidapi.h, \
                 install/clang_cl/include/hidapi/hidapi_winapi.h"
         fail: true
-    - name: Check CMake Export Package
+    - name: Check CMake ClangCL Export Package
       shell: cmd
       run: |
         cmake ^
@@ -230,7 +230,7 @@ jobs:
           "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
         cd build\clang_cl_test
         cmake --build . --target install
-    - name: Run CTest clang-cl
+    - name: Run CTest ClangCL
       shell: cmd
       working-directory: build/clang_cl
       run: ctest -C RelWithDebInfo --rerun-failed --output-on-failure
