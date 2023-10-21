@@ -208,7 +208,7 @@ jobs:
     - name: Configure CMake ClangCL
       shell: cmd
       run: |
-        cmake -B build\clang_cl -S hidapisrc -T ClangCL -DCMAKE_RC_FLAGS="-DWIN32 -D_MSC_VER" -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
+        cmake -B build\clang_cl -S hidapisrc -T ClangCL -DCMAKE_RC_COMPILER=llvm-rc -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
     - name: Build CMake ClangCL
       working-directory: build/clang_cl
       run: cmake --build . -v --config RelWithDebInfo --target install
