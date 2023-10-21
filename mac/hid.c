@@ -38,9 +38,6 @@
 
 #include "hidapi_darwin.h"
 
-/* As defined in AppKit.h, but we don't need the entire AppKit for a single constant. */
-extern const double NSAppKitVersionNumber;
-
 /* Barrier implementation because Mac OSX doesn't have pthread_barrier.
    It also doesn't have clock_gettime(). So much for POSIX and SUSv2.
    This implementation came from Brent Priddy and was posted on
@@ -376,7 +373,7 @@ static int get_string_property(IOHIDDeviceRef device, CFStringRef prop, wchar_t 
 
 	buf[0] = 0;
 
-	if (str) {
+	if (str && CFGetTypeID(str) == CFStringGetTypeID()) {
 		CFIndex str_len = CFStringGetLength(str);
 		CFRange range;
 		CFIndex used_buf_len;
@@ -466,7 +463,7 @@ int HID_API_EXPORT hid_init(void)
 	register_global_error(NULL);
 
 	if (!hid_mgr) {
-		is_macos_10_10_or_greater = (NSAppKitVersionNumber >= 1343); /* NSAppKitVersionNumber10_10 */
+		is_macos_10_10_or_greater = (kCFCoreFoundationVersionNumber >= 1151.16); /* kCFCoreFoundationVersionNumber10_10 */
 		hid_darwin_set_open_exclusive(1); /* Backward compatibility */
 		return init_hid_manager();
 	}
@@ -769,7 +766,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 		}
 		cur_dev = tmp;
 
-		/* move the pointer to the tail of returnd list */
+		/* move the pointer to the tail of returned list */
 		while (cur_dev->next != NULL) {
 			cur_dev = cur_dev->next;
 		}
