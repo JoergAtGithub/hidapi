@@ -208,10 +208,10 @@ jobs:
     - name: Configure CMake ClangCL
       shell: cmd
       run: |
-        cmake -B build\clang_cl -S hidapisrc -G"Visual Studio 17 2022" -T ClangCL -A x64 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
+        cmake -B build\clang_cl -S hidapisrc -G"Visual Studio 17 2022" -T ClangCL -A Win32 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHIDAPI_WITH_TESTS=ON -DHIDAPI_BUILD_PP_DATA_DUMP=ON -DHIDAPI_ENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=install\clang_cl -DHIDAPI_BUILD_HIDTEST=ON "-DCMAKE_C_FLAGS=%MSVC_COMPILE_FLAGS%"
     - name: Build CMake ClangCL
       working-directory: build/clang_cl
-      run: cmake --build . --config RelWithDebInfo --target install
+      run: cmake --build . --clean-first --config RelWithDebInfo --target install
     - name: Check artifacts ClangCL
       uses: andstor/file-existence-action@v2
       with:
